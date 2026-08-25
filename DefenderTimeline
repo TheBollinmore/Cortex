@@ -1,0 +1,200 @@
+dataset = xdr_data
+| filter agent_hostname = $Host
+| filter event_type in (ENUM.FILE, ENUM.NETWORK, ENUM.REGISTRY, ENUM.PROCESS, ENUM.LOAD_IMAGE, ENUM.LOGIN_EVENT)
+| filter not (event_type = ENUM.NETWORK AND event_sub_type in (ENUM.NETWORK_STREAM_LISTEN, ENUM.NETWORK_DATAGRAM_STATISTICS))
+| alter Event = if(
+    event_type = ENUM.FILE,
+        if(
+            (event_sub_type = ENUM.FILE_RENAME OR event_sub_type = ENUM.FILE_DIR_RENAME),
+            concat("User: ", to_string(actor_effective_username),
+                   " Process: ", to_string(actor_process_image_name),
+                   " Renamed ", to_string(action_file_previous_file_name),
+                   " to ", to_string(action_file_path)),
+            if(
+                event_sub_type = ENUM.FILE_DIR_CREATE,
+                concat("User: ", to_string(actor_effective_username),
+                       " Process: ", to_string(actor_process_image_name),
+                       " Created Directory ", to_string(action_file_path)),
+                if(
+                    (event_sub_type = ENUM.FILE_REMOVE OR event_sub_type = ENUM.FILE_DIR_REMOVE),
+                    concat("User: ", to_string(actor_effective_username),
+                           " Process: ", to_string(actor_process_image_name),
+                           " Removed ", to_string(action_file_path)),
+                    if(
+                        event_sub_type = ENUM.FILE_OPEN,
+                        concat("User: ", to_string(actor_effective_username),
+                               " Process: ", to_string(actor_process_image_name),
+                               " Opened File ", to_string(action_file_path)),
+                        if(
+                            event_sub_type = ENUM.FILE_WRITE,
+                            concat("User: ", to_string(actor_effective_username),
+                                   " Process: ", to_string(actor_process_image_name),
+                                   " Wrote to ", to_string(action_file_path)),
+                            if(
+                                event_sub_type = ENUM.FILE_CREATE_NEW,
+                                concat("User: ", to_string(actor_effective_username),
+                                       " Process: ", to_string(actor_process_image_name),
+                                       " Created ", to_string(action_file_path)),
+                                if(
+                                    (event_sub_type = ENUM.FILE_SET_SECURITY_DESCRIPTOR OR event_sub_type = ENUM.FILE_DIR_SET_SECURITY_DESCRIPTOR),
+                                    concat("User: ", to_string(actor_effective_username),
+                                           " Process: ", to_string(actor_process_image_name),
+                                           " Changed the File Security Descriptor of ",
+                                           to_string(action_file_path),
+                                           " to ", to_string(action_file_sec_desc)),
+                                    "Other File Event"
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        ),
+    if(
+        event_type = ENUM.NETWORK,
+        if(
+            event_sub_type = ENUM.NETWORK_STREAM_CONNECT,
+            concat("User: ", to_string(actor_effective_username),
+                   " Process: ", to_string(actor_process_image_name),
+                   " Connected to ", to_string(action_remote_ip), ":", to_string(action_remote_port)),
+            if(
+                event_sub_type = ENUM.NETWORK_STREAM_DISCONNECT,
+                concat("User: ", to_string(actor_effective_username),
+                       " Process: ", to_string(actor_process_image_name),
+                       " Disconnected from ", to_string(action_remote_ip), ":", to_string(action_remote_port)),
+                if(
+                    event_sub_type = ENUM.NETWORK_STREAM_CONNECT_FAILED,
+                    concat("User: ", to_string(actor_effective_username),
+                           " Process: ", to_string(actor_process_image_name),
+                           " Failed to connect to ", to_string(action_remote_ip), ":", to_string(action_remote_port)),
+                    if(
+                        event_sub_type = ENUM.NETWORK_OUTBOUND_ICMP,
+                        concat("User: ", to_string(actor_effective_username),
+                               " Process: ", to_string(actor_process_image_name),
+                               " Sent ICMP packet to ", to_string(action_remote_ip)),
+                        if(
+                            event_sub_type = ENUM.NETWORK_STREAM_ACCEPT,
+                            concat("User: ", to_string(actor_effective_username),
+                                   " Process: ", to_string(actor_process_image_name),
+                                   " Accepted connection from ", to_string(action_remote_ip), ":", to_string(action_remote_port)),
+                            "Other Network Event"
+                        )
+                    )
+                )
+            )
+        ),
+        if(
+            event_type = ENUM.PROCESS,
+            if(
+                event_sub_type = ENUM.PROCESS_START,
+                concat("User: ", to_string(actor_effective_username),
+                       " Process: ", to_string(actor_process_image_name),
+                       " Started From Parent Process: ", to_string(actor_process_image_name)),
+                if(
+                    event_sub_type = ENUM.PROCESS_STOP,
+                    concat("User: ", to_string(actor_effective_username),
+                           " Process: ", to_string(actor_process_image_name),
+                           " Stopped"),
+                    "Other Process Event"
+                )
+            ),
+            if(
+                event_type = ENUM.LOAD_IMAGE,
+                if(
+                    event_sub_type = ENUM.LOAD_IMAGE_MODULE,
+                    concat("User: ", to_string(actor_effective_username),
+                           " Process: ", to_string(actor_process_image_name),
+                           " Loaded module ", to_string(action_module_path)),
+                    "Other Load Image Event"
+                ),
+                if(
+                    event_type = ENUM.LOGIN_EVENT,
+                    if(
+                        action_user_status = ACTION_LOGIN,
+                        concat(
+                            "User: ", json_extract(login_data_dst_normalized_user, "$.identity"),
+                            " Logged in",
+                            " Status: ", json_extract(login_data, "$.outcome"),
+                            " Type: ", json_extract(login_data, "$.type")
+                        ),
+                        if(
+                            action_user_status = ACTION_LOCKED,
+                            concat(
+                                "User: ", json_extract(login_data_dst_normalized_user, "$.identity"),
+                                " Session locked"
+                            ),
+                            if(
+                                action_user_status = ACTION_UNLOCKED,
+                                concat(
+                                    "User: ", json_extract(login_data_dst_normalized_user, "$.identity"),
+                                    " Session unlocked"
+                                ),
+                                if(
+                                    action_user_status = ACTION_LOGOUT,
+                                    concat(
+                                        "User: ", json_extract(login_data_dst_normalized_user, "$.identity"),
+                                        " Logged out"
+                                    ),
+                                    "Other Login Event"
+                                )
+                            )
+                        )
+                    ),
+                    if(
+                        event_type = ENUM.REGISTRY,
+                        if(
+                            event_sub_type = ENUM.REGISTRY_SET_VALUE,
+                            concat("User: ", to_string(actor_effective_username),
+                                   " Process: ", to_string(actor_process_image_name),
+                                   " Set registry value ", to_string(action_registry_key_name),
+                                   " Value: ", to_string(action_registry_value_name),
+                                   " To: ", to_string(action_registry_data)),
+                            if(
+                                event_sub_type = ENUM.REGISTRY_DELETE_VALUE,
+                                concat("User: ", to_string(actor_effective_username),
+                                       " Process: ", to_string(actor_process_image_name),
+                                       " Deleted registry value Key: ", to_string(action_registry_key_name),
+                                       " Value: ", to_string(action_registry_value_name)),
+                                if(
+                                    event_sub_type = ENUM.REGISTRY_LOAD,
+                                    concat("User: ", to_string(actor_effective_username),
+                                           " Process: ", to_string(actor_process_image_name),
+                                           " Loaded registry hive ", to_string(action_registry_key_name)),
+                                    if(
+                                        event_sub_type = ENUM.REGISTRY_CREATE_KEY,
+                                        concat("User: ", to_string(actor_effective_username),
+                                               " Process: ", to_string(actor_process_image_name),
+                                               " Created registry key ", to_string(action_registry_key_name)),
+                                        if(
+                                            event_sub_type = ENUM.REGISTRY_DELETE_KEY,
+                                            concat("User: ", to_string(actor_effective_username),
+                                                   " Process: ", to_string(actor_process_image_name),
+                                                   " Deleted registry key ", to_string(action_registry_key_name)),
+                                            if(
+                                                event_sub_type = ENUM.REGISTRY_REGISTRY_OPEN,
+                                                concat("User: ", to_string(actor_effective_username),
+                                                       " Process: ", to_string(actor_process_image_name),
+                                                       " Opened registry key ", to_string(action_registry_key_name)),
+                                                if(
+                                                    event_sub_type = ENUM.REGISTRY_UNLOAD,
+                                                    concat("User: ", to_string(actor_effective_username),
+                                                           " Process: ", to_string(actor_process_image_name),
+                                                           " Unloaded registry hive ", to_string(action_registry_key_name)),
+                                                    "Other Registry Event"
+                                                )
+                                            )
+                                        )
+                                    )
+                                )
+                            )
+                        ),
+                        "Other Event Type"
+                    )
+                )
+            )
+        )
+    )
+)
+| filter Event contains $Search
+| fields _time, Agent_hostname, event_type, event_sub_type, Event
+| sort desc _time
