@@ -1,0 +1,8 @@
+This rule detects network connections to the Telegram API endpoint (api.telegram.org) from processes other than common web browsers like Chrome or Edge. This activity could indicate the use of Telegram for command and control, data exfiltration, or other malicious purposes by malware or threat actors.
+
+dataset = xdr_data
+| filter event_type = ENUM.NETWORK
+| filter event_sub_type = ENUM.NETWORK_STREAM_CONNECT
+| filter actor_process_image_name not in ("chrome.exe", "msedge.exe") //Add addtional browsers or legitimate applications as needed
+| filter action_external_hostname contains "api.telegram.org"
+| fields _time, agent_hostname, actor_effective_username, actor_process_command_line, actor_process_image_name, causality_actor_process_image_name
