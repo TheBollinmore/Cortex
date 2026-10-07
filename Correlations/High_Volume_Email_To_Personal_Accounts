@@ -1,0 +1,44 @@
+Detects potential data exfiltration or policy violation by identifying users sending a high volume of emails, large emails, or emails to many unique personal email addresses (e.g., Gmail, Yahoo, Outlook.com) from an Office 365 Exchange Online mailbox. This rule aggregates email activity by sender and flags if any of the defined thresholds are met: total sent data to personal addresses exceeds 25 MB, total messages sent to personal addresses exceeds 10, emails sent to more than 5 unique personal addresses, or any single message sent to a personal address exceeds 25 MB. This is designed to be ran as a scheduled correlation for a day time frame. Thresholds can also be configured to fit your environment. Each user will have a different line that contains all of the matching emails they sent to, the attachments, and subjects of the emails.
+
+dataset = msft_o365_exchange_online_raw 
+| filter _time > to_timestamp(subtract(to_epoch(current_time(), "SECONDS"), multiply(7, 86400)), "SECONDS")
+| filter operation = "Send"
+| alter dest = json_extract(item, "$.Recipients")
+| alter recipient_array = arraymap(
+    json_extract_array(to_json_string(dest), "$"),
+    json_extract_scalar("@element", "$.Address")
+  )
+| alter size = to_integer(json_extract_scalar(to_json_string(item), "$.SizeInBytes"))
+| alter sub = json_extract(item, "$.Subject")
+| alter attachments = json_extract_scalar(to_json_string(item), "$.Attachments")
+| arrayexpand recipient_array
+| alter recipient = recipient_array
+| alter recipient_domain = arrayindex(regextract(recipient, "@(.+)$"), 0)
+| filter recipient_domain in (
+    "gmail.com", "googlemail.com",
+    "yahoo.com", "ymail.com", "rocketmail.com",
+    "outlook.com", "hotmail.com", "live.com", "msn.com",
+    "icloud.com", "me.com", "mac.com",
+    "aol.com",
+    "proton.me", "protonmail.com", "pm.me",
+    "tutanota.com", "tutamail.com",
+    "mail.com", "gmx.com", "gmx.net",
+    "fastmail.com",
+    "mail.ru", "yandex.ru", "yandex.com"
+  )
+| comp count() as message_count,
+       sum(size) as total_bytes,
+       max(size) as largest_message,
+       count_distinct(recipient) as unique_personal_recipients,
+       values(recipient) as personal_addresses,
+       values(sub) as subjects,
+       values(attachments) as all_attachments
+       by MailboxOwnerUPN
+| alter total_mb = divide(total_bytes, 1048576)
+// === ALERT THRESHOLDS — fire if ANY of these hit ===
+| filter total_mb > 25              // OR sent >100 MB total to personal addresses
+      or message_count > 10           // OR sent >50 messages to personal addresses
+      or unique_personal_recipients > 5   // OR talked to 5+ different personal addresses
+      or largest_message > 26214400   // OR any single message >25 MB (max attachment-y)
+| sort desc total_mb
+| view column order = populated
