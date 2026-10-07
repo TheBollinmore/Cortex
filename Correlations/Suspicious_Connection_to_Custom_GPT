@@ -1,0 +1,7 @@
+dataset = panw_ngfw_url_raw
+| alter u = lowercase(uri)
+| filter u ~= "^(chatgpt\.com|chat\.openai\.com)/g/g-[0-9a-f]{32}-"
+| alter gpt_id = arrayindex(regextract(u, "/g/(g-[0-9a-f]{32})"), 0),
+        slug   = arrayindex(regextract(u, "/g/g-[0-9a-f]{32}-([^/?#]+)"), 0)
+| filter slug ~= "(plus|pro|premium|unlimited|official|chatgpt|openai|gpt-?\d)" or slug ~= "\d+-\d+$"
+| fields gpt_id, slug, source_user, source_ip
