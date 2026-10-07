@@ -1,0 +1,42 @@
+dataset = xdr_data
+| filter event_type = ENUM.PROCESS and event_sub_type = ENUM.PROCESS_START
+| filter causality_actor_process_image_path not in ("C:\Program Files\Tenable\Nessus Agent\nessus-service.exe", "C:\Windows\System32\omadmprc.exe", "C:\Program Files\Palo Alto Networks\Traps\cyserver.exe", "C:\Program Files (x86)\Microsoft Intune Management Extension\Microsoft.Management.Services.IntuneWindowsAgent.exe","C:\Program Files\AzureConnectedMachineAgent\ExtensionService2\GC\gc_extension_service.exe","C:\Program Files (x86)\Microsoft Intune Management Extension\ClientHealthEval.exe", "C:\Packages\Plugins\Microsoft.AzureData.WindowsAgent.SqlServer\1.1.3176.319\SqlServerExtensionDeployer.exe", "C:\Program Files (x86)\Dell\UpdateService\ServiceShell.exe","C:\Packages\Plugins\Microsoft.AzureData.WindowsAgent.SqlServer\*\SqlServerExtensionDeployer.exe")
+| filter causality_actor_remote_ip != "10.7.1.115"
+| filter causality_actor_process_command_line != "\"C:\WINDOWS\system32\cmd.exe\" /d /c C:\WINDOWS\system32\hpatchmonTask.cmd" and causality_actor_process_command_line != "C:\WINDOWS\system32\svchost.exe -k netsvcs -p -s Schedule"
+| filter action_process_cwd  not contains "nessus"
+| filter action_process_image_command_line not contains "sdset ThreatLocker" and action_process_image_command_line not contains "wmic path win32_computersystemproduct get uuid"
+| filter action_process_image_name in (
+    // host / system
+    "systeminfo.exe","hostname.exe","whoami.exe","tasklist.exe","driverquery.exe",
+    "query.exe","quser.exe","qwinsta.exe","qprocess.exe","msinfo32.exe","fsutil.exe",
+    "wevtutil.exe","getmac.exe","auditpol.exe","sc.exe","schtasks.exe","reg.exe","wmic.exe",
+    // network
+    "ipconfig.exe","arp.exe","route.exe","netstat.exe","netsh.exe",
+    "ping.exe","tracert.exe","pathping.exe","nslookup.exe","net.exe","net1.exe","portqry.exe",
+    // domain / AD
+    "nltest.exe","dsquery.exe","dsget.exe","gpresult.exe","setspn.exe","repadmin.exe",
+    "dcdiag.exe","adfind.exe",
+    // file / share / perms
+    "where.exe","findstr.exe","tree.exe","icacls.exe","cacls.exe",
+    // identity / creds / cloud
+    "dsregcmd.exe","klist.exe","cmdkey.exe","vaultcmd.exe"
+  )
+| alter evt_time = _time
+| bin _time span=1d
+| comp
+    count_distinct(action_process_image_name) as distinct_recon_tools,
+    values(action_process_image_name)         as recon_tools,
+    values(action_process_image_command_line) as recon_cmdlines,
+    count(action_process_image_command_line)  as total_recon_spawns,
+    values(actor_process_image_name)          as intermediate_parents,
+    values(actor_process_image_path)          as intermediate_parent_paths,
+    min(evt_time) as first_seen, max(evt_time) as last_seen
+  by _time, agent_hostname,
+     causality_actor_process_image_name,
+     causality_actor_process_command_line,
+     causality_actor_process_instance_id
+| alter parent_paths = lowercase(arraystring(intermediate_parent_paths, ","))
+| filter causality_actor_process_image_name != "omadmclient.exe"
+| filter distinct_recon_tools >= 4
+        and not parent_paths contains "Tenable\Nessus Agent\nessus"
+| sort desc distinct_recon_tools
