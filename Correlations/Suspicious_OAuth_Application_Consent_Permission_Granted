@@ -1,0 +1,75 @@
+Detects OAuth applications receiving permissions to the tenant, used for persistence and data theft. A consented app holds its own token and survives password resets and MFA, which is why consent phishing and post-compromise app registration are favored by both commodity BEC actors and nation-state (PerfectData is linked to Midnight Blizzard / APT29). Tiered: a hardcoded list of known-abused app IDs (PerfectData, eM Client, rclone, Supermailer, and others), layered over a scope-characteristic tier that catches bespoke apps by the permissions they request (Mail/EWS, Files/Sites, Directory, Application, offline_access), with admin/AllPrincipals consent escalating blast radius. Parses all three consent event shapes and resolves app identity across them.
+
+dataset = cloud_audit_logs
+| filter operation_name_orig in ("Consent to application", "Add delegated permission grant",
+                                 "Add app role assignment to service principal")
+| alter props    = to_json_string(raw_log)
+| alter actor    = lowercase(json_extract_scalar(raw_log, "$.properties.initiatedBy.user.userPrincipalName"))
+| alter actor_ip = json_extract_scalar(raw_log, "$.properties.initiatedBy.user.ipAddress")
+| alter result   = json_extract_scalar(raw_log, "$.properties.result")
+| filter result = "success"
+| alter scope_delegated = arrayindex(regextract(props, "DelegatedPermissionGrant\.Scope[^}]*?newValue[\"'\s:]+\"([^\"]+)\""), 0)
+| alter scope_consent   = arrayindex(regextract(props, "Scope:\s*([^,]+(?:\.[A-Za-z]+)*(?:\s+[A-Za-z0-9._]+)*),\s*CreatedDateTime"), 0)
+| alter scope_approle   = arrayindex(regextract(props, "AppRole\.Value[^}]*?newValue[\"'\s:]+\"([^\"]+)\""), 0)
+| alter scopes = lowercase(coalesce(scope_delegated, scope_consent, scope_approle, ""))
+| alter app_name_sp     = arrayindex(regextract(props, "ServicePrincipal\.DisplayName[^}]*?newValue[\"'\s:]+\"([^\"]+)\""), 0)
+| alter app_id_sp       = arrayindex(regextract(props, "ServicePrincipal\.AppId[^}]*?newValue[\"'\s:]+\"([^\"]+)\""), 0)
+| alter consent_clientid= arrayindex(regextract(props, "ClientId:\s*([0-9a-f\-]{36})"), 0)
+| alter target_app_name = arrayindex(regextract(props, "\"displayName\":\s*\"([^\"]+)\"[^}]*?\"type\":\s*\"ServicePrincipal\""), 0)
+| alter app_client      = arrayindex(regextract(props, "\"key\":\s*\"AppId\",\s*\"value\":\s*\"([^\"]+)\""), 0)
+| alter app_name = coalesce(app_name_sp, target_app_name)
+| alter app_id   = lowercase(coalesce(app_id_sp, consent_clientid, app_client))
+
+// null out if it resolved to the Microsoft Graph *resource* rather than the consented app
+| alter app_id   = if(app_id = "37f2ae74-bf3a-4a17-b48c-a2cf62a93ad8", null, app_id)
+
+// --- admin / all-tenant consent flag ---
+| alter is_admin_consent = if(
+      (props contains "IsAdminConsent" and props ~= "(?i)IsAdminConsent[^}]*?True")
+      or (props contains "OnBehalfOfAll" and props ~= "(?i)OnBehalfOfAll[^}]*?True")
+      or props contains "ConsentType: AllPrincipals"
+      or props ~= "(?i)DelegatedPermissionGrant\.ConsentType[^}]*?AllPrincipals"
+      or operation_name_orig = "Add app role assignment to service principal",
+      true, false)
+
+// --- TIER 1: known-bad OAuth app IDs ---
+| alter bad_app = if(
+      app_id in (
+        "ff8d92dc-3d82-41d6-bcbd-b9174d163620",   // PerfectData Software 
+        "2ef68ccc-8a4d-42ff-ae88-2d7bb89ad139",   // Mail_Backup 
+        "e9a7fea1-1cc0-4cd9-a31b-9137ca5deedd",   // eM Client
+        "a245e8c0-b53c-4b67-9b45-751d1dff8e6b",   // Newsletter Supermailer
+        "4761b959-9780-4c2d-87a3-512b4638f767",   // rclone
+        "a43e5392-f48b-46a4-a0f1-098b5eeb4757",   // CloudSponge
+        "858d7e42-35f0-44b7-9033-df309239a47f",   // ZoomInfo Login
+        "497ac034-5120-4c1a-929a-0351f5c09918",   // ZoomInfo Communitiez
+        "caffae8c-0882-4c81-9a27-d1803af53a40",   // SigParser
+        "77468577-4f6e-40e7-b745-11d3d0c28095",   // Fastmail
+        "179d5108-412b-4c95-8e34-06786784ab39",   // PostBox
+        "946c777c-bc85-489e-b034-392389ae23d6"    // Spike
+      )
+      or lowercase(app_name) contains "perfectdata"
+      or lowercase(app_name) contains "em client"
+      or lowercase(app_name) contains "supermailer"
+      or lowercase(app_name) contains "mail_backup",
+      true, false)
+
+// --- TIER 2: high-risk scope by characteristic ---
+| alter high_risk_scope = if(
+      scopes contains "mail.read" or scopes contains "mail.readwrite" or scopes contains "mail.send"
+      or scopes contains "ews.accessasuser" or scopes contains "imap.accessasuser"
+      or scopes contains "pop.accessasuser" or scopes contains "smtp.send"
+      or scopes contains "files.read.all" or scopes contains "files.readwrite.all"
+      or scopes contains "sites.read.all" or scopes contains "sites.readwrite.all"
+      or scopes contains "directory.read.all" or scopes contains "directory.readwrite.all"
+      or scopes contains "application.readwrite" or scopes contains "user.readwrite.all"
+      or scopes contains "mailboxsettings" or scopes contains "full_access_as_user",
+      true, false)
+| alter has_offline = if(scopes contains "offline_access", true, false)
+| filter bad_app = true or high_risk_scope = true
+| alter severity = if(bad_app = true, "critical",
+                   if(high_risk_scope = true and is_admin_consent = true, "critical",
+                   if(high_risk_scope = true, "high", "medium")))
+
+| fields _time, actor, actor_ip, operation_name_orig, app_name, app_id, app_client,
+         is_admin_consent, high_risk_scope, has_offline, bad_app, scopes, severity
