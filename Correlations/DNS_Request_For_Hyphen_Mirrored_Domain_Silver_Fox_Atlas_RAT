@@ -1,0 +1,10 @@
+This rule detects DNS requests to hyphen mirrored domains. This tactic has been seen from Silver Fox to deliver the Atlas RAT via Weaponized VPN Installers. Known bad according to the Hexastrike article trezor-trezor[.]com signal-signal[.]com quickq-quickq[.]com eyy-eyy[.]com
+
+preset = network_story
+| filter dns_query_name != null
+| alter host  = lowercase(dns_query_name)
+| alter sld   = arrayindex(regextract(host, "([a-z0-9-]+)\.[a-z]{2,24}$"), 0)
+| alter left  = arrayindex(regextract(sld,  "^([a-z0-9]{3,})-"), 0)
+| alter right = arrayindex(regextract(sld,  "-([a-z0-9]{3,})$"), 0)
+| filter left != null and left = right
+| fields _time, agent_hostname, actor_effective_username, actor_process_image_name, dns_query_name, dns_reply_code, dns_resolutions 
