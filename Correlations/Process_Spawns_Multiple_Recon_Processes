@@ -1,3 +1,5 @@
+Detect or threat hunt for a burst of Windows built-in discovery/reconnaissance utilities (Seven or more distinct tools within a single day) executed under one causality chain on one host, consistent with post-exploitation situational awareness by an interactive operator, script, or C2 implant.
+
 dataset = xdr_data
 | filter event_type = ENUM.PROCESS and event_sub_type = ENUM.PROCESS_START
 | filter causality_actor_process_image_path not in ("C:\Program Files\Tenable\Nessus Agent\nessus-service.exe", "C:\Windows\System32\omadmprc.exe", "C:\Program Files\Palo Alto Networks\Traps\cyserver.exe", "C:\Program Files (x86)\Microsoft Intune Management Extension\Microsoft.Management.Services.IntuneWindowsAgent.exe","C:\Program Files\AzureConnectedMachineAgent\ExtensionService2\GC\gc_extension_service.exe","C:\Program Files (x86)\Microsoft Intune Management Extension\ClientHealthEval.exe", "C:\Packages\Plugins\Microsoft.AzureData.WindowsAgent.SqlServer\1.1.3176.319\SqlServerExtensionDeployer.exe", "C:\Program Files (x86)\Dell\UpdateService\ServiceShell.exe","C:\Packages\Plugins\Microsoft.AzureData.WindowsAgent.SqlServer\*\SqlServerExtensionDeployer.exe")
