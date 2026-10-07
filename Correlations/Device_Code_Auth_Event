@@ -1,0 +1,5 @@
+dataset = cloud_audit_logs 
+| filter operation_name = "Login"
+| alter authmethod = json_extract(raw_log, "$.properties.originalTransferMethod")
+| filter authmethod contains "deviceCodeFlow"
+| filter operation_status_orig_code not in("70044","530033","53003")
