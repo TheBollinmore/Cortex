@@ -1,0 +1,6 @@
+dataset in ( ) // FILL IN YOUR DESIRED DATASETS
+| comp max(_time) as last_seen by _vendor, _product
+| alter minutes_silent = timestamp_diff(current_time(), last_seen, "MINUTE")
+| alter threshold = if(lowercase(_product) contains "EXAMPLE", 480, if(lowercase(_product) contains "EXAMPLE", 240, 120)) //DEFAULT THRESHOLD IS 120 MINUTES, CHANGE THE THRESHOLD BY PRODUCT LIKE THIS
+| filter minutes_silent >= threshold
+| fields _vendor, _product, last_seen, minutes_silent, threshold
