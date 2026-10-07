@@ -1,0 +1,38 @@
+dataset = msft_o365_sharepoint_online_raw 
+| filter operation in ("AddedToSecureLink","SharingSet","SharingInvitationCreated",
+                        "AnonymousLinkCreated","SecureLinkCreated","CompanyLinkCreated",
+                        "SharingInvitationAccepted","AddedToGroup")
+| alter target_domain = lowercase(arrayindex(regextract(TargetUserOrGroupName, "@(.+)$"), 0))
+| filter target_domain in (
+    "gmail.com","googlemail.com",
+    "yahoo.com","yahoo.co.uk","ymail.com","rocketmail.com","myyahoo.com",
+    "outlook.com","hotmail.com","live.com","msn.com",
+    "icloud.com","me.com","mac.com",
+    "aol.com","aim.com",
+    "proton.me","protonmail.com","pm.me",
+    "tutanota.com","tutamail.com","tuta.io",
+    "hushmail.com","mailfence.com","startmail.com","posteo.net",
+    "mail.ru","list.ru","yandex.ru","yandex.com",
+    "qq.com","163.com","126.com",
+    "naver.com","daum.net",
+    "web.de","gmx.com","gmx.net","gmx.de","gmx.us",
+    "free.fr","orange.fr","laposte.net",
+    "libero.it","virgilio.it",
+    "wp.pl","onet.pl",
+    "uol.com.br","terra.com.br",
+    "comcast.net","att.net","sbcglobal.net","cox.net","verizon.net",
+    "earthlink.net","juno.com",
+    "mail.com","fastmail.com","zoho.com",
+    "duck.com","anonaddy.com","simplelogin.com","33mail.com","relay.firefox.com",
+    "guerrillamail.com","mailinator.com","10minutemail.com",
+    "tempmail.com","yopmail.com","trashmail.com","sharklasers.com"
+  )
+| alter actor = UserId
+| alter targetuser = TargetUserOrGroupName
+| alter event_source = "SharePoint-Share"
+| alter event_op = operation
+| alter object = SourceFileName
+| alter detail = SiteUrl
+| fields _time, event_source, event_op, actor, targetuser, target_domain, object, detail
+| sort desc _time
+| view column order = populated
