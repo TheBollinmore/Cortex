@@ -1,0 +1,63 @@
+Pairs the connecting process against the remote destination port and ranks by lift, meaning how much less often the two co-occur than their individual frequencies would predict. The target shape is a process with a large network baseline that has touched a given service port once or twice: a browser or office application reaching SMB, RDP, SSH or WinRM, or an observability agent speaking a protocol outside its purpose. Those pairings are lateral movement or credential access wearing a familiar process name.
+
+The process is keyed on normalized directory plus image name rather than name alone, so distinct binaries sharing a name stay separate and any hit is attributable to a specific file. The kernel-mode System process is preserved by falling back to the image name when no path exists, because System on SMB is meaningful client activity and dropping it would be a real coverage loss.
+
+PORT HANDLING Ephemeral ports are cut. On inbound connections the remote port is drawn from the dynamic range, so every one appears unique and produces tens of thousands of meaningless rare pairings; an inbound source port carries no information.
+
+Universal ports are excluded: HTTPS, HTTP and DNS. Their baselines are large enough that any process which rarely touches them floats to the top on arithmetic alone, and "this application made one HTTPS call" is not a finding.
+
+WATCH FOR SHARED BASELINES When a port exists to serve one application, that port's baseline and the application's baseline are the same flows. Any third process meeting that port then produces the largest possible denominator and ranks first while being entirely benign. Compare the port's total against the dominant process's total; if they match closely, treat pairings on that port as suspect ranking rather than signal.
+
+TUNING Thresholds are the port baseline, the process baseline, and the pair count. Set the process floor well below a name-keyed equivalent, since keying on path fragments each process's baseline across install locations. Include distinct destination IP count in the output: a single fixed destination across several connections is what beaconing looks like.
+
+Check whether one process holds most of your network events. If it does, lift degenerates into a constant multiple of the reverse conditional for every row of that process, the metric stops comparing processes, and that process needs its own query.
+
+Rarity is not maliciousness. Expect monitoring and security agents to occupy this list, since they are often the only processes with enough volume to clear the thresholds.
+
+config case_sensitive = false timeframe = 7d
+| dataset = xdr_data
+| filter event_type = ENUM.NETWORK
+| filter agent_os_type = ENUM.AGENT_OS_WINDOWS
+| filter actor_process_image_name != null and action_remote_port != null
+ | filter action_remote_port < 49152
+// | filter action_remote_port not in (443, 80, 53)
+| alter port = action_remote_port
+| alter pname = lowercase(actor_process_image_name)
+| alter ppath = coalesce(lowercase(actor_process_image_path), pname)
+| alter pdir = replex(ppath, ".[[:alnum:]_.$~%()+,'!#&@ -]+$", "")
+| alter pdir = replex(pdir, "^[a-z]:", "")
+| alter pdir = replex(pdir, "_[[:xdigit:]]{16}_.*$", "")
+| alter pdir = replex(pdir, "^.users.[[:alnum:]_. -]+", "<userprofile>")
+| alter pdir = replex(pdir, "^.documents and settings.[[:alnum:]_. -]+", "<userprofile>")
+| alter pdir = replex(pdir, ".[[:alnum:]_-]+[.]tmp.*$", "<tmpdir>")
+| alter pdir = replex(pdir, ".temp..*$", "<temp>")
+| alter pdir = replex(pdir, ".temp$", "<temp>")
+| alter pdir = replex(pdir, "[[:digit:]]+[.][[:digit:]]+[.][[:digit:]]+[.][[:digit:]]+", "<ver>")
+| alter pdir = replex(pdir, "[[:digit:]]+[.][[:digit:]]+[.][[:digit:]]+", "<ver>")
+| alter pdir = replex(pdir, "<ver>_[[:digit:]]+", "<ver>")
+| alter pdir = replex(pdir, "[[:xdigit:]]{8}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{12}", "<uuid>")
+| alter pdir = replex(pdir, "[[:xdigit:]]{32,}", "<hex>")
+| alter pdir = replex(pdir, "[[:digit:]]{5,}", "<num>")
+| alter proc = concat(pdir, "|", pname)
+| comp count(actor_process_image_name) as n_ab,
+       count_distinct(agent_hostname) as hosts,
+       count_distinct(action_remote_ip) as dest_ips
+     by port, proc, pname
+| alter scope_all = 1
+| windowcomp sum(n_ab) by port      as n_a
+| windowcomp sum(n_ab) by proc      as n_b
+| windowcomp sum(n_ab) by scope_all as n_total
+| alter f_ab = to_float(n_ab)
+| alter f_a  = to_float(n_a)
+| alter f_b  = to_float(n_b)
+| alter f_n  = to_float(n_total)
+| alter p_a_given_b = divide(f_ab, f_b)
+| alter p_b_given_a = divide(f_ab, f_a)
+| alter lift_ab     = divide(multiply(f_ab, f_n), multiply(f_a, f_b))
+| filter n_b >= 200
+| filter n_a >= 1000
+| filter n_ab <= 5
+| fields pname, port, n_ab, n_a, n_b, hosts, dest_ips,
+         p_a_given_b, p_b_given_a, lift_ab, proc
+| sort asc lift_ab
+| limit 200
