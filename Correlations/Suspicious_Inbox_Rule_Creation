@@ -1,0 +1,70 @@
+dataset = saas_audit_logs
+| filter service_type = "Exchange"
+| filter operation_name_orig in ("New-InboxRule", "Set-InboxRule", "UpdateInboxRules")
+
+// --- desktop path: RuleOperation tells us Add vs Modify vs Remove ---
+| alter RuleOperation = arrayindex(regextract(raw_log, "\"Name\":\s*\"RuleOperation\",\s*\"Value\":\s*\"([^\"]+)\""), 0)
+| filter RuleOperation != "ModifyMailboxRule"
+
+// --- normalize create-vs-modify across both client paths ---
+| alter RuleAction = if(
+      operation_name_orig = "New-InboxRule", "CREATE_WEB",
+      if(operation_name_orig = "UpdateInboxRules" and RuleOperation = "AddMailboxRule", "CREATE_DESKTOP",
+      if(operation_name_orig = "UpdateInboxRules" and RuleOperation = "ModifyMailboxRule", "MODIFY_DESKTOP",
+      if(operation_name_orig = "Set-InboxRule", "MODIFY_WEB",
+      if(operation_name_orig = "UpdateInboxRules" and RuleOperation = "RemoveMailboxRule", "REMOVE_DESKTOP",
+      "OTHER")))))
+| filter RuleAction in ("CREATE_WEB", "CREATE_DESKTOP", "MODIFY_DESKTOP", "MODIFY_WEB")
+
+// --- RuleName: coalesce web (Name=Name) and desktop (Name=RuleName) ---
+| alter RuleName_web     = arrayindex(regextract(raw_log, "\"Name\":\s*\"Name\",\s*\"Value\":\s*\"([^\"]*)\""), 0)
+| alter RuleName_desktop = arrayindex(regextract(raw_log, "\"Name\":\s*\"RuleName\",\s*\"Value\":\s*\"([^\"]*)\""), 0)
+| alter RuleName = coalesce(RuleName_web, RuleName_desktop)
+
+// --- desktop condition + actions ---
+| alter RuleCondition = arrayindex(regextract(raw_log, "\"Name\":\s*\"RuleCondition\",\s*\"Value\":\s*\"([^\"]*)\""), 0)
+| alter RuleState     = arrayindex(regextract(raw_log, "\"Name\":\s*\"RuleState\",\s*\"Value\":\s*\"([^\"]+)\""), 0)
+
+// --- web-path fields ---
+| alter ToFolder        = arrayindex(regextract(raw_log, "\"Name\":\s*\"MoveToFolder\",\s*\"Value\":\s*\"([^\"]+)\""), 0)
+| alter WordsContaining = arrayindex(regextract(raw_log, "\"Name\":\s*\"SubjectOrBodyContainsWords\",\s*\"Value\":\s*\"(.*?)\"\s*\}"), 0)
+| alter MarkedAs        = arrayindex(regextract(raw_log, "\"Name\":\s*\"MarkAsRead\",\s*\"Value\":\s*\"([^\"]+)\""), 0)
+
+// --- action flags: contains-based so they work across both paths + nested/escaped JSON ---
+| alter rl = lowercase(raw_log)
+| alter act_move    = if(rl contains "\"actiontype\":\"move\"" or rl contains "movetofolder", true, false)
+| alter act_delete  = if(rl contains "deletemessage" or rl contains "\"actiontype\":\"delete\"", true, false)
+| alter act_forward = if(rl contains "forwardto" or rl contains "redirectto" or rl contains "forwardasattachment"
+                         or rl contains "\"actiontype\":\"forward\"" or rl contains "\"actiontype\":\"redirect\"", true, false)
+| alter act_markread= if(rl contains "markasread", true, false)
+| alter act_stop    = if(rl contains "stopprocessingrules" or RuleState = "ExitAfterExecution", true, false)
+
+// --- suspicious NAME: empty, null, or visually-hidden (. , space, short, non-alnum) ---
+| alter name_suspicious = if(
+      RuleName = "" or RuleName = null
+      or RuleName ~= "^[\s\.\,\-_~`'\|]+$"          
+      or len(trim(RuleName)) <= 2,                   
+      true, false)
+
+// --- suspicious CONDITION/WORDS: BEC + security-hiding keywords ---
+| alter cond = lowercase(coalesce(RuleCondition, WordsContaining, ""))
+| alter kw_suspicious = if(cond ~= "ach|wire|payment|invoice|bank|routing|swift|remit|payroll|direct.?deposit|phish|password|security|microsoft|helpdesk|mfa|verif|suspicious|fraud|it.?support|sign.?in|login", true, false)
+
+// --- IP enrichment ---
+| alter anonTunnel   = json_extract_scalar(caller_ip_enrichment, "$.tunnels_anonymous")
+| alter IsVPN        = json_extract_scalar(caller_ip_enrichment, "$.tunnels_type")
+| alter VPNOperator  = json_extract_scalar(caller_ip_enrichment, "$.tunnels_operator")
+
+// --- fire on the dangerous combinations ---
+| filter
+      act_forward = true                                             
+      or name_suspicious = true                                      
+      or (act_move = true and kw_suspicious = true)                  
+      or (act_delete = true and kw_suspicious = true)                
+      or (act_markread = true and act_move = true and kw_suspicious = true)  
+      or (act_stop = true and (act_move = true or act_delete = true) and kw_suspicious = true)
+
+| fields _time, identity_name, operation_name_orig, RuleAction, RuleOperation,
+         RuleName, name_suspicious, RuleCondition, WordsContaining, cond, kw_suspicious,
+         act_forward, act_move, act_delete, act_markread, act_stop,
+         ToFolder, anonTunnel, IsVPN, VPNOperator, raw_log
