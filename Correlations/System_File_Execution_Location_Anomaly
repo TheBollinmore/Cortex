@@ -1,3 +1,5 @@
+Detects Windows system binaries and commonly abused native LOLBins executing from outside their expected system directories, indicating a renamed, relocated, or imposter copy consistent with masquerading, DLL side-loading staging, or process-name spoofing.
+
 dataset = xdr_data
 | filter agent_os_type = ENUM.AGENT_OS_WINDOWS
     and event_type = ENUM.PROCESS
