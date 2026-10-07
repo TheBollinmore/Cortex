@@ -1,0 +1,35 @@
+dataset = microsoft_windows_raw
+| filter event_id = 5145
+
+// --- extract fields from the event_data JSON blob ---
+| alter subj_sid       = json_extract_scalar(event_data, "$.SubjectUserSid")
+| alter subj_user      = json_extract_scalar(event_data, "$.SubjectUserName")
+| alter subj_domain    = json_extract_scalar(event_data, "$.SubjectDomainName")
+| alter subj_logon_id  = json_extract_scalar(event_data, "$.SubjectLogonId")
+| alter object_type    = json_extract_scalar(event_data, "$.ObjectType")
+| alter src_ip         = json_extract_scalar(event_data, "$.IpAddress")
+| alter src_port       = json_extract_scalar(event_data, "$.IpPort")
+| alter share_name     = json_extract_scalar(event_data, "$.ShareName")
+| alter share_path     = json_extract_scalar(event_data, "$.ShareLocalPath")
+| alter rel_target     = json_extract_scalar(event_data, "$.RelativeTargetName")
+| alter access_mask    = json_extract_scalar(event_data, "$.AccessMask")
+| alter access_list    = json_extract_scalar(event_data, "$.AccessList")
+
+// --- normalize / derive ---
+| alter is_machine_acct = if(subj_user ~= "\$$", true, false)     // trailing $ = computer account
+| alter is_sysvol       = if(lowercase(share_name) contains "sysvol", true, false)
+| alter gpo_guid        = arrayindex(regextract(rel_target, "\{([0-9A-Fa-f\\-]{36})\}"), 0)
+| alter access_read     = if(access_mask ~= "0x1[02]0081|0x120089|0x1200a9", true, false)
+
+// --- scope to SYSVOL/NETLOGON, drop machine-account GPO processing noise ---
+| filter is_sysvol = true or lowercase(share_name) contains "netlogon"
+| filter is_machine_acct = false
+
+| fields _time, subj_user, subj_domain, subj_sid, subj_logon_id,
+         src_ip, src_port, share_name, rel_target, gpo_guid,
+         access_mask, access_read, access_list
+| bin _time span = 2m
+| comp count_distinct(rel_target) as unique_paths, count() as accesses,
+        count_distinct(gpo_guid) as gpos_touched
+        by subj_user, src_ip, _time
+| filter unique_paths >= 150
