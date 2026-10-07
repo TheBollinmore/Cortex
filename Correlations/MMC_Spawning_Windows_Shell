@@ -1,0 +1,12 @@
+dataset = xdr_data
+| filter agent_os_type = ENUM.AGENT_OS_WINDOWS
+    and event_type = ENUM.PROCESS
+    and event_sub_type = ENUM.PROCESS_START
+| alter parent_name = lowercase(actor_process_image_name),
+        proc_name = lowercase(action_process_image_name),
+        proc_path = lowercase(action_process_image_path)
+| filter parent_name = "mmc.exe"
+| filter proc_name in ("cmd.exe", "powershell.exe", "pwsh.exe", "wscript.exe", "cscript.exe", "sh.exe", "bash.exe", "reg.exe", "regsvr32.exe")
+    or proc_path contains "\bitsadmin"
+| filter actor_process_command_line not contains "\"C:\Windows\system32\mmc.exe\" \"C:\Windows\system32\taskschd.msc\""
+| fields _time, agent_hostname, actor_effective_username, actor_process_image_path, actor_process_command_line, action_process_image_path, action_process_image_command_line, causality_actor_process_image_path
