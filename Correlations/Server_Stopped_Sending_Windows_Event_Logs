@@ -1,0 +1,15 @@
+dataset = microsoft_windows_raw
+| filter _collector_name != "Cortex Agent"
+| filter host_name != null and host_name != ""
+| alter hostnamefixed = lowercase(arrayindex(regextract(to_string(host_name), "^[^\.]*"), 0))
+| comp max(_time) as last_seen by hostnamefixed
+| join type = inner (
+    dataset = endpoints
+    | alter ep_name = lowercase(endpoint_name)
+    | fields ep_name, endpoint_type
+    | dedup ep_name
+  ) as et et.ep_name = hostnamefixed
+| filter lowercase(endpoint_type) contains "servers"
+| alter silent_hours = timestamp_diff(current_time(), last_seen, "HOUR")
+| filter silent_hours >= 4
+| sort desc silent_hours
