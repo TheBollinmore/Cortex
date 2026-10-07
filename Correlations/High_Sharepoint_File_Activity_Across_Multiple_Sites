@@ -1,0 +1,34 @@
+Detects users accessing, downloading, or copying a high volume of document files (>100 unique files) across multiple SharePoint sites (>1) within a single hour, excluding legitimate OneDrive sync client activity. The rule targets file types commonly associated with sensitive business data — Office documents, PDFs, archives, databases, email exports (PST/OST/MSG), and OneNote notebooks — and aggregates by user and hour to surface bulk collection patterns consistent with insider data theft, account compromise, or pre-exfiltration staging by ransomware affiliates
+
+dataset = msft_o365_sharepoint_online_raw
+| filter operation in ("FileAccessed", "FileDownloaded", "FileDownloadedFromBrowser",
+                        "FileModified", "FileCopied")
+| filter UserAgent not contains "OneDriveSync"
+| filter UserAgent not contains "Microsoft SkyDriveSync"
+| filter SourceFileExtension in (
+    "docx","doc","docm",
+    "xlsx","xls","xlsm","xlsb","csv",
+    "pptx","ppt","pptm",
+    "pdf",
+    "txt","rtf",
+    "accdb","mdb","sqlite","db",
+    "zip","7z","rar","tar","gz",
+    "msg","eml",
+    "vsd","vsdx",
+    "one","onetoc2",
+    "pst","ost",
+    "key","numbers","pages"
+  )
+| alter hour = format_timestamp("%Y-%m-%d %H:00", _time)
+| comp count() as actions,
+       count_distinct(ObjectId) as unique_files,
+       count_distinct(SiteUrl) as unique_sites,
+       count_distinct(operation) as unique_operations,
+       values(operation) as operations,
+       values(SiteUrl) as sites,
+       values(SourceFileExtension) as extensions
+       by UserId, hour
+| filter unique_files > 100
+| filter unique_sites > 1
+| sort desc unique_files
+| view column order = populated
