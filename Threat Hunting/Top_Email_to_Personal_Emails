@@ -1,0 +1,43 @@
+dataset = msft_o365_exchange_online_raw 
+| filter operation = "Send"
+| alter dest = json_extract(item, "$.Recipients")
+| alter recipient_array = arraymap(
+    json_extract_array(to_json_string(dest), "$"),
+    json_extract_scalar("@element", "$.Address")
+  )
+| alter size = to_integer(json_extract_scalar(to_json_string(item), "$.SizeInBytes"))
+| alter sub = json_extract(item, "$.Subject")
+| alter attachments = json_extract_scalar(to_json_string(item), "$.Attachments")
+| alter att_count = to_integer(json_extract_scalar(to_json_string(item), "$.AttachmentCount"))
+| arrayexpand recipient_array
+| alter recipient = recipient_array
+| alter recipient_domain = arrayindex(regextract(recipient, "@(.+)$"), 0)
+| filter recipient_domain in (
+    "gmail.com", "googlemail.com",
+    "yahoo.com", "ymail.com", "rocketmail.com",
+    "outlook.com", "hotmail.com", "live.com", "msn.com",
+    "icloud.com", "me.com", "mac.com",
+    "aol.com",
+    "proton.me", "protonmail.com", "pm.me",
+    "tutanota.com", "tutamail.com",
+    "mail.com", "gmx.com", "gmx.net",
+    "fastmail.com",
+    "mail.ru", "yandex.ru", "yandex.com"
+  )
+| comp count() as message_count,
+       sum(size) as total_bytes,
+       max(size) as largest_message,
+       min(_time) as first_seen,
+       max(_time) as last_seen,
+       count_distinct(recipient) as unique_personal_recipients,
+       values(recipient_domain) as domains_used,
+       values(recipient) as personal_addresses,
+       values(sub) as subjects,
+       values(attachments) as all_attachments,
+       sum(att_count) as total_attachment_count
+       by MailboxOwnerUPN
+| alter total_mb = divide(total_bytes, 1048576)
+| alter avg_msg_size_kb = divide(divide(total_bytes, message_count), 1024)
+| sort desc total_bytes
+| limit 50
+| view column order = populated
