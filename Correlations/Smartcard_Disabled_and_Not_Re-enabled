@@ -1,0 +1,17 @@
+Similar to my previous rule, this detects when a user accounts smartcard is disabled (change code 2060) but not subsequently re-enabled (change code 2092) within the observed timeframe. This could indicate malicious activity such as an attacker disabling accounts to bypass multi-factor authentication or other security controls. This version of the rule is designed to run as a scheduled correlation based on your time acceptance of a users smartcard being disabled. This will suppress the quick helpdesk troubleshooting of accounts since it only fires if the smartcard remains disabled, however the detection will be slower since it does not fire on the real time event.
+
+dataset = microsoft_windows_raw
+| alter TargetUsertemp = json_extract(event_data, "$.TargetUserName")
+| alter TargetUser = replace(TargetUsertemp,"\"","")
+| alter SubjectUsertemp = json_extract(event_data, "$.SubjectUserName")
+| alter SubjectUser = replace(SubjectUsertemp,"\"","")
+| alter changecodetemp = arrayindex(
+      regextract(message, "User Account Control:\t*\r?\n\t+([%0-9]+)")
+  ,0)
+| alter changecode = replace(changecodetemp, "%%", "")
+| filter changecode in ("2060", "2092")
+| alter disable_event = if(changecode = "2060", 1, 0)
+| alter enable_event = if(changecode = "2092", 1, 0)
+| comp sum(disable_event) as total_disabled, sum(enable_event) as total_enabled by TargetUser
+| filter total_disabled > 0 and total_enabled = 0
+| fields TargetUser, total_disabled, total_enabled
