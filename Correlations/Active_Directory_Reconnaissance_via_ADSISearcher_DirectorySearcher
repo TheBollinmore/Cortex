@@ -1,0 +1,68 @@
+Detects in-process LDAP enumeration of Active Directory through the .NET System.DirectoryServices classes, the [adsisearcher] type accelerator and DirectorySearcher, captured from PowerShell ScriptBlock logging in action_evtlog_message. Severity is assigned from the LDAP filter and requested attributes. CRITICAL covers queries after credential-bearing attributes (LAPS, gMSA, sIDHistory, GPP/SYSVOL paths) or DCSync replication rights. HIGH covers known attack-technique targeting: Tier Zero enumeration via adminCount, SPN enumeration for Kerberoasting, delegation attributes, and the UAC bitmask filters used for AS-REP roasting and unconstrained delegation. MEDIUM covers broad estate enumeration across groups, computers, GPOs, and OUs. Command-line context (suspicious parent process, encoded or hidden execution) is surfaced as separate fields for triage rather than folded into the score.
+
+dataset = xdr_data
+| filter event_type = ENUM.EVENT_LOG 
+| filter actor_process_image_name in ("powershell.exe", "powershell_ise.exe", "pwsh.exe", "cmd.exe")
+| filter causality_actor_process_command_line not contains "S:\Automatic Tasks\VCenter\CV-VCSA-01\SnapShotScripts\CreateSnapshots" and causality_actor_process_command_line not contains "C:\scripts\Start-ADSyncSyncCycle.ps1" and causality_actor_process_command_line not contains "C:\scripts\Start-ADSyncSyncCycle.ps1" and causality_actor_process_command_line not contains ".\Setup\Timed Permissions\Office365_Dist_List_Permissions.ps1" and causality_actor_process_command_line not contains "C:\Program Files\Microsoft\Exchange Server\V15\bin\RemoteExchange.ps1" and causality_actor_process_command_line not contains "removeprintersprinceton.ps1"
+| filter actor_effective_username not contains "skype"
+| filter action_evtlog_message contains "adsisearcher"
+      or action_evtlog_message contains "directorysearcher"
+| alter msg = lowercase(action_evtlog_message)
+
+// ---- CRITICAL: after secrets directly, or DCSync-capable attributes ----
+| alter is_crit = if(
+       msg contains "ms-mcs-admpwd"
+    or msg contains "mslaps-password"
+    or msg contains "msds-managedpassword"
+    or msg contains "sidhistory"
+    or msg contains "ds-replication-get-changes"
+    or msg contains "unixuserpassword"
+    or msg contains "userpassword"
+    or msg contains "gpcfilesyspath"
+    or (msg contains "admincount" and (msg contains "description" or msg contains "'info'" or msg contains "comment")),
+    1, 0)
+
+// ---- HIGH: attack-technique targeting ----
+| alter is_high = if(
+       msg contains "admincount=1"
+    or msg contains "admincount"
+    or msg contains "serviceprincipalname=*"
+    or msg contains "serviceprincipalname=" 
+    or msg contains "1.2.840.113556.1.4.803"
+    or msg contains "1.2.840.113556.1.4.1941"
+    or msg contains "msds-allowedtodelegateto"
+    or msg contains "msds-allowedtoactonbehalfofotheridentity"
+    or msg contains "useraccountcontrol:1.2.840"
+    or msg contains "trusteddomain"
+    or msg contains "(objectclass=trusteddomain)"
+    or msg contains "dont_req_preauth"
+    or msg contains "4194304",
+    1, 0)
+
+// ---- MEDIUM: broad / group / infrastructure enumeration ----
+| alter is_med = if(
+       msg contains "primarygroupid=512"
+    or msg contains "primarygroupid=516"
+    or msg contains "primarygroupid=521"
+    or msg contains "(objectclass=group)"
+    or msg contains "(objectcategory=computer)"
+    or msg contains "(objectclass=grouppolicycontainer)"
+    or msg contains "operatingsystem"
+    or msg contains "(objectclass=organizationalunit)"
+    or (msg contains "objectcategory=user" and msg contains "findall"),
+    1, 0)
+
+// ---- Context multipliers ----
+| alter parent = lowercase(causality_actor_process_image_name)
+| alter ctx_parent = if(parent in ("wsmprovhost.exe","winrshost.exe","sqlservr.exe",
+                                   "w3wp.exe","java.exe","winword.exe","excel.exe",
+                                   "outlook.exe","mshta.exe","wscript.exe","cscript.exe"), "yes", "no")
+| alter ctx_enc = if(msg contains "frombase64string" or msg contains "-enc"
+                  or msg contains "encodedcommand" or msg contains "-w hidden"
+                  or msg contains "-windowstyle hidden" or msg contains "-nop", "yes", "no")
+
+| alter severity = if(is_crit = 1, "1_CRITICAL",
+                   if(is_high = 1, "2_HIGH",
+                   if(is_med  = 1, "3_MEDIUM", "4_LOW")))
+| fields _time, severity, agent_hostname, actor_effective_username,
+         parent, causality_actor_process_command_line, ctx_parent, ctx_enc, action_evtlog_message
