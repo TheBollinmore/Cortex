@@ -1,0 +1,48 @@
+Detects attempts to disable or tamper with PowerShell logging mechanisms (Script Block Logging, Module Logging, Transcription) by modifying or deleting specific registry keys or setting their values to disable logging. This activity is often performed by adversaries to evade detection.
+
+dataset = xdr_data
+| filter event_type = ENUM.REGISTRY
+| filter event_sub_type in (
+    ENUM.REGISTRY_SET_VALUE, 
+    ENUM.REGISTRY_DELETE_VALUE, 
+    ENUM.REGISTRY_DELETE_KEY
+  )
+| alter key_lower = lowercase(action_registry_key_name)
+| filter key_lower contains "policies\microsoft\windows\powershell\scriptblocklogging"
+    or key_lower contains "policies\microsoft\windows\powershell\modulelogging"
+    or key_lower contains "policies\microsoft\windows\powershell\transcription"
+| filter event_sub_type != ENUM.REGISTRY_SET_VALUE
+    or (
+      action_registry_value_name in (
+        "EnableScriptBlockLogging",
+        "EnableScriptBlockInvocationLogging",
+        "EnableModuleLogging",
+        "EnableTranscripting"
+      )
+      and action_registry_data in ("0", "0x00000000", "0x0")
+    )
+// Exclude legitimate Intune CSP enforcement (signed Microsoft DeviceEnroller from System32)
+| filter not (
+    actor_process_image_name = "DeviceEnroller.exe"
+    and actor_process_image_path = "C:\Windows\System32\DeviceEnroller.exe"
+    and actor_process_signature_vendor contains "Microsoft"
+  )
+// Exclude legitimate Group Policy processing (signed Microsoft svchost running gpsvc)
+| filter not (
+    actor_process_image_name = "svchost.exe"
+    and actor_process_image_path = "C:\Windows\System32\svchost.exe"
+    and actor_process_command_line contains "gpsvc"
+    and actor_process_signature_vendor contains "Microsoft"
+  )
+| alter tamper_method = if(
+    event_sub_type = ENUM.REGISTRY_SET_VALUE, "set_to_zero",
+    event_sub_type = ENUM.REGISTRY_DELETE_VALUE, "value_deleted",
+    event_sub_type = ENUM.REGISTRY_DELETE_KEY, "key_deleted",
+    "unknown")
+| fields _time, agent_hostname, actor_effective_username,
+         actor_process_image_name, actor_process_image_path,
+         actor_process_signature_status, actor_process_signature_vendor,
+         actor_process_command_line,
+         causality_actor_process_image_name, causality_actor_process_command_line,
+         action_registry_key_name, action_registry_value_name, action_registry_data,
+         event_sub_type, tamper_method
