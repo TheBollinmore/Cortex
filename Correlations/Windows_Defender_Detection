@@ -1,0 +1,16 @@
+config case_sensitive = false 
+| dataset = microsoft_windows_raw
+| filter provider_name = "Microsoft-Windows-Windows Defender"
+| filter event_id in (1006, 1015, 1116, 1118, 1119)
+| alter threat_name = arrayindex(regextract(message, "Name:\s*(.*?)\r?\n"), 0),
+        threat_severity = arrayindex(regextract(message, "Severity:\s*(.*?)\r?\n"), 0),
+        threat_path = arrayindex(regextract(message, "Path:\s*(.*?)\r?\n"), 0),
+        detection_user = arrayindex(regextract(message, "Detection User:\s*(.*?)\r?\n"), 0),
+        process_name = arrayindex(regextract(message, "Process Name:\s*(.*?)\r?\n"), 0),
+        outcome = if(
+            event_id = 1116, "Detected - Pending Action",
+            event_id = 1118, "Remediation Failed",
+            event_id = 1119, "Critical Remediation Error",
+            event_id = 1006, "Malware Detected",
+            event_id = 1015, "Suspicious Behavior", "Unknown")
+| fields _time, host_name, event_id, outcome, threat_name, threat_severity, threat_path, process_name, detection_user, message
