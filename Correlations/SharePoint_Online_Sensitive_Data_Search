@@ -1,0 +1,41 @@
+This rule detects when users perform search queries in SharePoint Online that contain keywords indicative of sensitive data. The rule categorizes these searches into several types: credentials, personnel/HR information, infrastructure reconnaissance, financial/PII, and confidential business information.
+
+dataset = msft_o365_sharepoint_online_raw
+| filter operation = "SearchQueryPerformed"
+| alter query_lower = lowercase(SearchQueryText)
+| alter category = if(
+    query_lower contains "password" or query_lower contains "passwd"
+        or query_lower contains "credential" or query_lower contains "secret"
+        or query_lower contains "api key" or query_lower contains "apikey"
+        or query_lower contains "private key" or query_lower contains "ssh key"
+        or query_lower contains ".pem" or query_lower contains ".pfx"
+        or query_lower contains "vault" or query_lower contains "keepass"
+        or query_lower contains "service account" or query_lower contains "recovery key",
+    "credentials",
+  if(query_lower contains "salary" or query_lower contains "salaries"
+        or query_lower contains "compensation" or query_lower contains "pay band"
+        or query_lower contains "payroll" or query_lower contains "performance review"
+        or query_lower contains "termination" or query_lower contains "severance"
+        or query_lower contains "layoff" or query_lower contains "personnel file"
+        or query_lower contains "disciplinary" or query_lower contains "internal affairs",
+    "personnel_hr",
+  if(query_lower contains "network diagram" or query_lower contains "firewall"
+        or query_lower contains "vpn config" or query_lower contains "infrastructure"
+        or query_lower contains "asset inventory" or query_lower contains "server list"
+        or query_lower contains "domain controller" or query_lower contains "ad structure",
+    "infrastructure_recon",
+  if(query_lower contains "ssn" or query_lower contains "social security"
+        or query_lower contains "credit card" or query_lower contains "bank account"
+        or query_lower contains "wire transfer" or query_lower contains "routing number"
+        or query_lower contains "tax id",
+    "financial_pii",
+  if(query_lower contains "confidential" or query_lower contains "proprietary"
+        or query_lower contains "trade secret" or query_lower contains "merger"
+        or query_lower contains "acquisition",
+    "confidential_business",
+    "other"))))
+)
+| filter category != "other"
+| fields _time, UserId, category, SearchQueryText, SiteUrl, ClientIP
+| sort desc _time
+| view column order = populated
