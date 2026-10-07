@@ -1,0 +1,12 @@
+dataset = xdr_data
+| filter agent_os_type = ENUM.AGENT_OS_WINDOWS
+    and event_type = ENUM.PROCESS
+    and event_sub_type = ENUM.PROCESS_START
+| alter proc_path = lowercase(action_process_image_path),
+        proc_name = lowercase(action_process_image_name)
+| filter proc_name in ("atbroker.exe", "audiodg.exe", "bcdedit.exe", "bitsadmin.exe", "certreq.exe", "certutil.exe", "cmstp.exe", "conhost.exe", "consent.exe", "cscript.exe", "csrss.exe", "dashost.exe", "defrag.exe", "dfrgui.exe", "dism.exe", "dllhost.exe", "dllhst3g.exe", "dwm.exe", "eventvwr.exe", "finger.exe", "fsquirt.exe", "logonui.exe", "lsaiso.exe", "lsass.exe", "lsm.exe", "msiexec.exe", "ntoskrnl.exe", "powershell.exe", "powershell_ise.exe", "pwsh.exe", "regsvr32.exe", "rundll32.exe", "runonce.exe", "runtimebroker.exe", "schtasks.exe", "services.exe", "sihost.exe", "smartscreen.exe", "smss.exe", "spoolsv.exe", "svchost.exe", "taskhost.exe", "taskhostw.exe", "taskmgr.exe", "userinit.exe", "werfault.exe", "werfaultsecure.exe", "wininit.exe", "winlogon.exe", "winver.exe", "wlanext.exe", "wscript.exe", "wsl.exe", "wsmprovhost.exe")
+| filter proc_path not in ("c:\$windows.~bt\*", "c:\$winreagent\*", "c:\windows\softwaredistribution\*", "c:\windows\system32\*", "c:\windows\systemtemp\*", "c:\windows\syswow64\*", "c:\windows\uus\*", "c:\windows\winsxs\*")
+    and proc_path not contains "\systemroot\system32\"
+| filter not (proc_name = "pwsh.exe" and proc_path in ("c:\program files\powershell\7\*", "c:\program files\powershell\7-preview\*", "c:\program files\windowsapps\microsoft.powershell_*", "c:\program files\windowsapps\microsoft.powershellpreview*", "*\appdata\local\microsoft\windowsapps\microsoft.powershell*"))
+| filter not (proc_name = "wsl.exe" and proc_path in ("c:\program files\windowsapps\microsoftcorporationii.windowssubsystemforlinux*", "c:\program files\wsl\*", "c:\users\*\appdata\local\microsoft\windowsapps\*"))
+| fields _time, agent_hostname, actor_effective_username, action_process_image_path, action_process_image_command_line, actor_process_image_path, causality_actor_process_image_path
