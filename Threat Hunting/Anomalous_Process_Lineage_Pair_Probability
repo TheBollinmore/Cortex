@@ -1,0 +1,57 @@
+Ranks parent/child process pairs by lift, meaning how much less often the two co-occur than their individual frequencies would predict, so that no single high-volume parent can dominate the results. Sorting on P(child|parent) alone does not work for this pair. In most environments a handful of interpreters and service hosts account for a large share of all process starts, and every rare child of those parents scores lower than any other pairing, burying the classic Office-spawns-a-shell cases. The reciprocal of lift reads directly as "this pairing is N times rarer than chance."
+
+The parent is keyed on normalized directory plus image name rather than name alone, so the many distinct binaries called updater.exe or setup.exe remain separate and any hit is immediately attributable to a specific file. Parent paths are normalized before counting (user profiles, version and GUID directories, temp scratch folders) because unnormalized paths split every per-user and per-version copy into its own identity and manufacture false rarity.
+
+Universal children (conhost.exe, werfault.exe, wermgr.exe) are excluded. They appear beneath nearly every parent, so their very large baselines float any parent that rarely spawns them to the top on arithmetic alone, with no signal behind it.
+
+TUNING Thresholds are n_b (parent baseline), n_a (child baseline) and n_ab (pair rarity). The probability metrics are derived from these and need no separate cutoff. Set the parent floor well below what you would use for a name-keyed hunt, because keying on path fragments each parent's baseline across its install locations, and a floor tuned for pooled names will silently drop tools that deploy a copy of themselves into every directory they serve. Calibrate by checking the distribution of distinct paths per image name in your own data before setting it.
+
+BLIND SPOT A masqueraded or newly planted binary has no path baseline of its own, so its parent count is tiny and the floor removes it. Pooling by image name is what allows a renamed binary to inherit its legitimate namesake's baseline and surface at all. Run a name-keyed variant of this query alongside it. This one tells you which binary, the name-keyed one is more likely to tell you that something happened.
+
+Rarity is not maliciousness. Triage on whether the lineage is structurally possible, host count, and command line.
+
+config case_sensitive = false timeframe = 30d
+| dataset = xdr_data
+| filter event_type = ENUM.PROCESS and event_sub_type = ENUM.PROCESS_START
+| filter agent_os_type = ENUM.AGENT_OS_WINDOWS
+| filter action_process_image_name != null and actor_process_image_path != null
+| alter child = lowercase(action_process_image_name)
+| alter ppath = lowercase(actor_process_image_path)
+| alter pdir = replex(ppath, ".[[:alnum:]_.$~%()+,'!#&@ -]+$", "")
+| alter pdir = replex(pdir, "^[a-z]:", "")
+| alter pdir = replex(pdir, "_[[:xdigit:]]{16}_.*$", "")
+| alter pdir = replex(pdir, "^.users.[[:alnum:]_. -]+", "<userprofile>")
+| alter pdir = replex(pdir, "^.documents and settings.[[:alnum:]_. -]+", "<userprofile>")
+| alter pdir = replex(pdir, ".[[:alnum:]_-]+[.]tmp.*$", "<tmpdir>")
+| alter pdir = replex(pdir, ".temp..*$", "<temp>")
+| alter pdir = replex(pdir, ".temp$", "<temp>")
+| alter pdir = replex(pdir, "[[:digit:]]+[.][[:digit:]]+[.][[:digit:]]+[.][[:digit:]]+", "<ver>")
+| alter pdir = replex(pdir, "[[:digit:]]+[.][[:digit:]]+[.][[:digit:]]+", "<ver>")
+| alter pdir = replex(pdir, "<ver>_[[:digit:]]+", "<ver>")
+| alter pdir = replex(pdir, "[[:xdigit:]]{8}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{12}", "<uuid>")
+| alter pdir = replex(pdir, "[[:xdigit:]]{32,}", "<hex>")
+| alter pdir = replex(pdir, "[[:digit:]]{5,}", "<num>")
+| alter pname = lowercase(actor_process_image_name)
+| alter parent = concat(pdir, "|", pname)
+| comp count(action_process_image_name) as n_ab,
+       count_distinct(agent_hostname) as hosts
+     by child, parent, pname
+| alter scope_all = 1
+| windowcomp sum(n_ab) by child     as n_a
+| windowcomp sum(n_ab) by parent    as n_b
+| windowcomp sum(n_ab) by scope_all as n_total
+| alter f_ab = to_float(n_ab)
+| alter f_a  = to_float(n_a)
+| alter f_b  = to_float(n_b)
+| alter f_n  = to_float(n_total)
+| alter p_a_given_b = divide(f_ab, f_b)
+| alter p_b_given_a = divide(f_ab, f_a)
+| alter lift_ab     = divide(multiply(f_ab, f_n), multiply(f_a, f_b))
+| filter child not in ("conhost.exe","werfault.exe","wermgr.exe")
+| filter n_b >= 500
+| filter n_a >= 1000
+| filter n_ab <= 5
+| fields child, pname, parent, n_ab, n_a, n_b, hosts,
+         p_a_given_b, p_b_given_a, lift_ab
+| sort asc lift_ab
+| limit 200
