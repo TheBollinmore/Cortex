@@ -1,3 +1,7 @@
+Detects outbound web traffic to OpenAI ChatGPT Custom GPTs where the URL slug contains keywords potentially indicative of unauthorized or non-standard usage, such as keywords implying premium, professional, or official status, which could be used as a cover for data exfiltration or credential gathering via malicious or typo-squatted GPT instances.
+
+https://www.huntress.com/blog/chatgpt-custom-gpts-clickfix-rat
+
 dataset = panw_ngfw_url_raw
 | alter u = lowercase(uri)
 | filter u ~= "^(chatgpt\.com|chat\.openai\.com)/g/g-[0-9a-f]{32}-"
