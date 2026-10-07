@@ -1,3 +1,5 @@
+Detects instances where the Microsoft Management Console (mmc.exe) launches suspicious child processes often associated with adversary activity, such as command shells, scripting engines, or system management utilities. This behavior is frequently used to proxy execution or perform unauthorized system modifications, with the exception of the standard Task Scheduler snap-in.
+
 dataset = xdr_data
 | filter agent_os_type = ENUM.AGENT_OS_WINDOWS
     and event_type = ENUM.PROCESS
