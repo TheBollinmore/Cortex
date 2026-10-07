@@ -1,0 +1,26 @@
+This rule monitors Kerberos TGS (Ticket-Granting Service) requests for suspicious patterns indicative of Kerberoasting, specifically looking for the use of weak encryption algorithms (RC4 or DES) and high volumes of service ticket requests for unique Service Principal Names (SPNs). It groups activity by source host and time window, flagging activity that involves DES encryption or a significant number of unique SPN requests. Great for detecting kerberoasting activity from unmanaged or rogue devices
+
+dataset = corelight_zeek_raw 
+| filter request_type = "TGS"
+| filter client != null and service != null
+| filter client not contains "WELLKNOWN" and client not contains "ANONYMOUS" and client not contains "krbtgt"
+| alter principal = lowercase(client)
+| alter cipher_norm = lowercase(cipher)
+| filter cipher_norm contains "rc4" or cipher_norm contains "des"
+| alter is_des = if(cipher_norm contains "des", 1, 0)
+| bin _time span = 10m
+| comp
+    count_distinct(service) as distinct_spns,
+    count() as weak_tgs,
+    values(service) as targeted_spns,
+    values(cipher_norm) as ciphers,
+    values(principal) as principals,
+    max(is_des) as any_des,
+    earliest(_time) as first, latest(_time) as last
+  by id_orig_h, _time
+
+// fire on: DES (always) OR fan-out
+| filter any_des = 1 or distinct_spns >= 1
+
+| alter severity = if(any_des = 1, "high",
+                   if(distinct_spns >= 10, "high", "medium"))
