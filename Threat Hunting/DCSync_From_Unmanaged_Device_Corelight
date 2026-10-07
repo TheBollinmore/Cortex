@@ -1,0 +1,18 @@
+dataset = corelight_zeek_raw
+| filter _path = "dce_rpc"
+| filter endpoint = "drsuapi" and operation = "DRSGetNCChanges"
+| join type = left conflict_strategy = both (
+    dataset = endpoints
+    | arrayexpand ip_address
+    | filter ip_address != null
+    | alter mgd_ip = ip_address, mgd_host = endpoint_name
+    | fields mgd_ip, mgd_host
+  ) as ep mgd_ip = id_orig_h
+| alter src_class = if(id_orig_h in ("//FILL IN"), "0_DOMAIN_CONTROLLER",
+                    if(mgd_host = null or mgd_host = "", "1_UNMANAGED",
+                       "2_MANAGED_NON_DC"))
+| filter src_class != "0_DOMAIN_CONTROLLER"
+| comp count() as call_count, min(_time) as first_seen, max(_time) as last_seen,
+       values(id_resp_h) as targeted_dcs
+  by src_class, id_orig_h, mgd_host
+| sort asc src_class
