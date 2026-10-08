@@ -1,0 +1,30 @@
+dataset = msft_o365_general_raw
+| filter Operation = "CopilotInteraction"
+| alter app_host  = json_extract_scalar(CopilotEventData, "$.AppHost"),
+        license   = json_extract_scalar(CopilotEventData, "$.LicenseType"),
+        dlp_def   = json_extract_scalar(CopilotEventData, "$.DLPEvaluationDeferred"),
+        guardrail = json_extract_scalar(CopilotEventData, "$.GuardrailDetails"),
+        plugins   = json_extract_scalar(CopilotEventData, "$.AISystemPlugin"),
+        resources = json_extract_array(CopilotEventData, "$.AccessedResources")
+| alter on_net = if(incidr(ClientIP, "167.7.128.0/22"), 1, 0), n_res = array_length(resources)
+| arrayexpand resources
+| alter res_name  = json_extract_scalar(resources, "$.Name"),
+        res_type  = json_extract_scalar(resources, "$.Type"),
+        res_site  = json_extract_scalar(resources, "$.SiteUrl"),
+        res_label = json_extract_scalar(resources, "$.SensitivityLabelId"),
+        res_xpia  = json_extract_scalar(resources, "$.XPIADetected"),
+        res_pol   = json_extract_scalar(resources, "$.PolicyDetails")
+| alter rn_l = lowercase(coalesce(res_name, ""))
+| alter flag = if(
+      res_xpia = "true", "xpia_detected",
+      plugins != "[]" and plugins != null, "plugin_used",
+      guardrail != "[]" and guardrail != null, "guardrail_hit",
+      rn_l contains "pass" or rn_l contains "cred" or rn_l contains "secret" or rn_l contains ".kdbx", "credential_doc",
+      rn_l contains "ssn" or rn_l contains "incident" or rn_l contains "arrest" or rn_l contains "warrant" or rn_l contains "cji" or rn_l contains "ncic" or rn_l contains "rap sheet" or rn_l contains "criminal history" or rn_l contains "case management" or rn_l contains "fatality" or rn_l contains "evidence", "possible_cji",
+      rn_l contains "salary" or rn_l contains "payroll" or rn_l contains "termination" or rn_l contains "disciplinary" or rn_l contains "resume", "hr_pii",
+      on_net = 0 and n_res > 0, "offnet_grounded",
+      null)
+| filter flag != null
+| comp count() as hits, count_distinct(UserId) as users, min(_time) as first_seen, max(_time) as last_seen
+     by flag, UserId, ClientIP, app_host, license, res_type, res_name, res_label
+| sort desc hits
