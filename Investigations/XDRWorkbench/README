@@ -1,0 +1,97 @@
+The IR Workbench investigates Cortex XDR alerts by looking at everything a host did over a chosen time window. It’s two parts: an XQL query that exports the host’s activity from xdr_data, and a single, self-contained HTML page that loads that export so you can sort, filter, pivot and document it. The page runs entirely offline in the browser. The export is parsed locally and nothing is uploaded or sent anywhere.
+
+How it works:
+
+Edit the query: set the hostname(s) and the time window (explicit start/end, or the query-builder time picker). Run it in XSIAM and export the results as a TSV.
+Open ir-workbench.html in a browser and drop the export onto it. Several exports (other hosts or time slices) can be dropped at once.
+
+What the query collects:
+
+All process, network, file, registry, event-log and module-load events for the selected hosts. Nothing is filtered for “suspicious” content. Identical events are rolled up into one row with a count and first/last-seen times, which keeps large time windows manageable. Every row keeps its process instance ID, so any connection, file write or registry change can be traced to the exact process that made it. The query has optional commented-out lines for cutting known noise (for example, Microsoft-signed module loads or browser cache writes).
+                                                                                                                                                                    What the page provides:
+
+  Tabs: Overview, All events, Processes (parent→child tree or table), Network, Web / domains, Files, Registry, Modules, Logons, Event log, Autoruns & accounts, Tagged.
+  Grid on every tab: sort by any column; filter per column (contains, exclude, exact, empty/not-empty, regex, numeric comparisons); group by any column; choose           which columns to show; export the current view to CSV.
+  Pivoting: click any value to keep only it, exclude it, or group by it. From any event you can jump to everything that process instance did, ±5 minutes of               surrounding activity, or its place in the process tree.
+  Time controls: an activity histogram you can drag to select a time range, from/to times, and an alert-time marker with a ±N-minute window.
+  Optional filters: hide Microsoft-signed activity; show only events flagged by built-in heuristics. Heuristic flags are a triage aid and are off by default.
+  Case work: tag events as Malicious, Suspicious or Benign and add notes, plus case-level notes. These save automatically in the browser and can be exported as a         JSON case file and reloaded later.
+Report: a one-click Markdown report with the case notes, a timeline of tagged events, and indicators (IPs, domains, hashes, file paths) pulled from malicious and         suspicious tags.
+
+Limits:
+
+Size: the page comfortably handles a few hundred thousand rows. The query stops at 500,000 rows, so narrow the time window or turn on the noise trims for busy hosts.
+Coverage: visibility depends on what the XDR agent collects. Event-log coverage depends on the agent’s log collection policy.
+Web activity: shows domains (TLS server name or HTTP host), not full URLs.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           
+Query:
+dataset = xdr_data
+| filter lowercase(agent_hostname) in ($hostname) //Change hostname
+| filter event_type in (ENUM.PROCESS, ENUM.NETWORK, ENUM.FILE, ENUM.REGISTRY, ENUM.EVENT_LOG, ENUM.LOAD_IMAGE)
+// ---- optional trims: uncomment any line to drop that bulk --------------
+// | filter event_type != ENUM.LOAD_IMAGE
+// | filter not (event_type = ENUM.LOAD_IMAGE and action_module_signature_vendor = "Microsoft Corporation")
+// | filter not (event_type = ENUM.FILE and (lowercase(action_file_path) contains "\appdata\local\google\chrome\user data\" or lowercase(action_file_path) contains "\appdata\local\microsoft\edge\user data\" or lowercase(action_file_path) contains "\windows\winsxs\" or lowercase(action_file_path) contains "\windows\softwaredistribution\"))
+// | filter not (event_type = ENUM.REGISTRY and lowercase(actor_process_image_name) in ("svchost.exe", "msmpeng.exe", "searchindexer.exe"))
+// | filter not (event_type = ENUM.NETWORK and action_remote_ip in ("127.0.0.1", "::1"))
+// ------------------------------------------------------------------------
+// Event log fields. If the ev_* columns come back empty, action_evtlog_data_fields is already a string
+// in your tenant: change the next line to  ev = action_evtlog_data_fields
+| alter ev = to_json_string(action_evtlog_data_fields)
+| alter host     = lowercase(agent_hostname),
+        section  = if(event_type = ENUM.PROCESS, "process", if(event_type = ENUM.NETWORK, "network", if(event_type = ENUM.FILE, "file", if(event_type = ENUM.REGISTRY, "registry", if(event_type = ENUM.LOAD_IMAGE, "module", "evtlog"))))),
+        sub      = to_string(event_sub_type),
+        user     = coalesce(action_process_username, actor_effective_username),
+        proc     = actor_process_image_name,
+        pid      = actor_process_os_pid,
+        proc_path = actor_process_image_path,
+        proc_cmd = actor_process_command_line,
+        proc_sha256 = actor_process_image_sha256,
+        proc_signer = actor_process_signature_vendor,
+        proc_sig = to_string(actor_process_signature_status),
+        cgo      = causality_actor_process_image_name,
+        cgo_cmd  = causality_actor_process_command_line,
+        aiid     = actor_process_instance_id,
+        child    = action_process_image_name,
+        child_pid = action_process_os_pid,
+        child_path = action_process_image_path,
+        child_cmd = action_process_image_command_line,
+        child_sha256 = action_process_image_sha256,
+        child_signer = action_process_signature_vendor,
+        child_sig = to_string(action_process_signature_status),
+        ciid     = action_process_instance_id,
+        rip      = action_remote_ip,
+        rport    = action_remote_port,
+        domain   = coalesce(dst_action_external_hostname, action_external_hostname),
+        file     = action_file_path,
+        file_prev = action_file_previous_file_path,
+        file_sha256 = action_file_sha256,
+        reg_key  = action_registry_key_name,
+        reg_value = action_registry_value_name,
+        reg_data = action_registry_data,
+        module   = action_module_path,
+        module_sha256 = action_module_sha256,
+        module_signer = action_module_signature_vendor,
+        module_sig = to_string(action_module_signature_status),
+        evid     = to_integer(action_evtlog_event_id),
+        ev_user  = json_extract_scalar(ev, "$.TargetUserName"),
+        ev_domain = json_extract_scalar(ev, "$.TargetDomainName"),
+        ev_logon_type = json_extract_scalar(ev, "$.LogonType"),
+        ev_ip    = json_extract_scalar(ev, "$.IpAddress"),
+        ev_ws    = json_extract_scalar(ev, "$.WorkstationName"),
+        ev_subject = json_extract_scalar(ev, "$.SubjectUserName"),
+        ev_proc  = json_extract_scalar(ev, "$.ProcessName"),
+        ev_auth  = json_extract_scalar(ev, "$.AuthenticationPackageName"),
+        ev_obj   = coalesce(json_extract_scalar(ev, "$.ServiceName"), json_extract_scalar(ev, "$.TaskName"), json_extract_scalar(ev, "$.ShareName"), json_extract_scalar(ev, "$.MemberName"), json_extract_scalar(ev, "$.TargetServerName"), json_extract_scalar(ev, "$.ObjectName")),
+        ev_obj2  = coalesce(json_extract_scalar(ev, "$.ImagePath"), json_extract_scalar(ev, "$.RelativeTargetName"), json_extract_scalar(ev, "$.Status"), json_extract_scalar(ev, "$.FailureReason")),
+        ev_json  = ev,
+        ev_msg   = action_evtlog_message
+| comp count() as n, min(_time) as t0, max(_time) as t1
+  by host, section, sub, user, proc, pid, proc_path, proc_cmd, proc_sha256, proc_signer, proc_sig, cgo, cgo_cmd, aiid,
+     child, child_pid, child_path, child_cmd, child_sha256, child_signer, child_sig, ciid,
+     rip, rport, domain, file, file_prev, file_sha256, reg_key, reg_value, reg_data,
+     module, module_sha256, module_signer, module_sig,
+     evid, ev_user, ev_domain, ev_logon_type, ev_ip, ev_ws, ev_subject, ev_proc, ev_auth, ev_obj, ev_obj2, ev_json, ev_msg
+| alter first_ms = to_epoch(t0, "millis"), last_ms = to_epoch(t1, "millis")
+| fields - t0, t1
+| sort asc first_ms
+| limit 500000
