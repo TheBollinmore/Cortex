@@ -8,7 +8,8 @@ Open ir-workbench.html in a browser and drop the export onto it. Several exports
 What the query collects:
 
 All process, network, file, registry, event-log and module-load events for the selected hosts. Nothing is filtered for “suspicious” content. Identical events are rolled up into one row with a count and first/last-seen times, which keeps large time windows manageable. Every row keeps its process instance ID, so any connection, file write or registry change can be traced to the exact process that made it. The query has optional commented-out lines for cutting known noise (for example, Microsoft-signed module loads or browser cache writes).
-                                                                                                                                                                    What the page provides:
+
+What the page provides:
 
   Tabs: Overview, All events, Processes (parent→child tree or table), Network, Web / domains, Files, Registry, Modules, Logons, Event log, Autoruns & accounts, Tagged.
   Grid on every tab: sort by any column; filter per column (contains, exclude, exact, empty/not-empty, regex, numeric comparisons); group by any column; choose           which columns to show; export the current view to CSV.
