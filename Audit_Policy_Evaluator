@@ -41,7 +41,7 @@ If you are running another collector to pull windows event logs, it is important
 //       all other providers = log level (information / warning / error / verbose / critical).
 dataset = microsoft_windows_raw
 | alter h    = lowercase(arrayindex(regextract(host_name, "^([^.]+)"), 0)),
-        src  = if(_collector_type = "Cortex Agent", "agent", "cribl"),
+        src  = if(_collector_type = "Cortex Agent", "agent", "{insert any additional}"), //insert other sources
         log  = coalesce(channel, "(operational)"),
         kind = if(provider_name = "Microsoft-Windows-Security-Auditing",
                   if(_collector_type = "Cortex Agent", "n/a (agent)",
