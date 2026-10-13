@@ -1,0 +1,78 @@
+The Cortex XDR agent's Windows Event Log collection is not a full channel forward. It is a curated list: a handful of Operational channels in full, plus a fixed subset of event IDs from Security, System and Application
+Query used to pull the cortex agent baseline:
+dataset = microsoft_windows_raw
+| filter _collector_type = "Cortex Agent"
+| alter log = coalesce(channel, "(operational)")
+| comp count() as events, count_distinct(host_name) as hosts, min(log_level) as level_min, max(log_level) as level_max, max(_time) as last_seen by log, provider_name, event_id
+| sort asc provider_name, asc event_id
+
+Results:
+Microsoft-Windows-PowerShell/Operational (Microsoft-Windows-PowerShell): 4100, 4101, 4102, 4103, 4104, 8193, 8194, 8195, 8196, 8197, 8198, 12039, 16385, 24577, 24578, 24579, 32784, 40961, 40962, 53504, 53506
+Windows PowerShell legacy (PowerShell): 103, 300, 400, 403, 600, 800
+Security (Microsoft-Windows-Security-Auditing): 4616, 4624, 4625, 4634, 4647, 4648, 4662, 4672, 4698, 4702, 4720, 4722, 4723, 4724, 4725, 4726, 4727, 4728, 4729, 4731, 4732, 4733, 4735, 4737, 4738, 4740, 4741, 4742, 4743, 4767, 4768, 4769, 4770, 4771, 4776, 4778, 4779, 4781, 4799, 4800, 4801, 4802, 4803, 4822, 4825, 4872, 4886, 4887, 4888, 4898, 4946, 5058, 5059, 5136, 5140
+Microsoft-Windows-TaskScheduler/Operational (Microsoft-Windows-TaskScheduler): 106, 129, 141, 142, 200, 201
+Microsoft-Windows-LDAP-Client (Microsoft-Windows-LDAP-Client): 30
+System (Service Control Manager): 7000, 7045
+System (User32): 1074
+System (EventLog): 6008
+System (WudfUsbccidDriver): 104
+Security/System (Microsoft-Windows-Eventlog): 30, 104, 1101, 1104, 1105, 1108, 6000
+Application (Application Error): 1000
+Application (Application Hang): 1002
+Application (.NET Runtime): 1026
+Application (Windows Error Reporting): 1001
+Application (Microsoft-Windows-User Profiles Service): 1511
+Application (Microsoft-Windows-Audit-CVE): 1
+Microsoft-Windows-PrintService/Operational (Microsoft-Windows-PrintService): 307, 308, 309, 310, 311
+Windows Firewall With Advanced Security (Microsoft-Windows-Windows Firewall With Advanced Security): 2004, 2005, 2006, 2033
+TerminalServices-RDPClient (Microsoft-Windows-TerminalServices-ClientActiveXCore): 1024
+Microsoft-Windows-Windows Defender/Operational (Microsoft-Windows-Windows Defender): 1116, 1117
+Directory Service (Microsoft-Windows-ActiveDirectory_DomainService): 1644
+Microsoft-Windows-CAPI2/Operational (Microsoft-Windows-CAPI2): 11, 70, 90
+Microsoft-Windows-Threat-Intelligence (Microsoft-Windows-Threat-Intelligence): 24
+
+PowerShell and scheduled-task telemetry in full, identity and account-management events from Security, service installs and crashes from System and Application, and Defender detections. What it leaves out is just as deliberate: no 4688 process creation, no object access (4656–4663), no 4697, no audit-policy change, nothing from WMI-Activity, RDP session, NTLM, AppLocker or CodeIntegrity channels. The agent assumes its own EDR telemetry covers process and file activity
+
+
+If you are running another collector to pull windows event logs, it is important to see the total, overall coverage of the logs:
+
+// Every event arriving from every Windows log, per collector, provider, event ID and outcome/level.
+// 7-day window. Swap the dataset for microsoft_sysmon_raw to get the same view of Sysmon.
+//       all other providers = log level (information / warning / error / verbose / critical).
+dataset = microsoft_windows_raw
+| alter h    = lowercase(arrayindex(regextract(host_name, "^([^.]+)"), 0)),
+        src  = if(_collector_type = "Cortex Agent", "agent", "cribl"),
+        log  = coalesce(channel, "(operational)"),
+        kind = if(provider_name = "Microsoft-Windows-Security-Auditing",
+                  if(_collector_type = "Cortex Agent", "n/a (agent)",
+                     if(_raw_log contains "Audit Failure", "Failure", "Success")),
+                  coalesce(log_level, LevelDisplayName, to_string(Level), "-"))
+| comp count() as events, count_distinct(h) as hosts, min(_time) as first_seen, max(_time) as last_seen
+       by src, log, provider_name, event_id, kind
+| alter lk = 1
+| join type = left (
+    dataset = microsoft_windows_raw
+    | alter fk = 1, h = lowercase(arrayindex(regextract(host_name, "^([^.]+)"), 0))
+    | comp count_distinct(h) as fleet by fk
+  ) as f f.fk = lk
+| alter pct_hosts = round(multiply(divide(hosts, fleet), 100))
+| alter coverage = if(pct_hosts >= 80, "fleet-wide", if(pct_hosts >= 5, "partial", "few hosts"))
+| alter per_host_day = round(divide(divide(events, hosts), 7))
+| fields src, log, provider_name, event_id, kind, coverage, pct_hosts, hosts, events, per_host_day, first_seen, last_seen
+| sort asc src, asc log, asc provider_name, asc event_id, asc kind
+| limit 5000
+
+UNDERSTANDING THE RESULTS:
+The output is the complete inventory of what the SIEM receives from Windows event logs. Gaps are found by reading it three ways.
+
+By src — what each collector contributes. Filter src = "{insert}" and look at the distinct log values. Filter src = "agent" and log = "(operational)": that is the full list of Operational channels you have, and it is short — PowerShell, TaskScheduler, LDAP-Client, PrintService, Firewall, Defender (1116/1117 only), CAPI2, Directory Service. Any channel you expect and do not see in either list is collected by nobody. 
+
+By coverage and pct_hosts — whether a log reaches the fleet or a corner of it. fleet-wide is what it says. partial on a Security ID is usually the event being rare, not the policy being off. Partial on an Operational channel is a profile scope problem. Few hosts on a Security ID that should be everywhere is an audit-policy inconsistency.
+
+By kind — success, failure, or both. Two rows for the same event_id (one Success, one Failure) means the subcategory is set to both; one row means one side only. 4625 only ever appears as Failure, 4624 only as Success — that is the event, not the policy. A subcategory with no rows at all is off or had no activity in the window; widen to 30 days before calling it off.
+
+By per_host_day — what each row costs. Sort descending. 
+
+Overlap. Same provider_name + event_id appearing under both src values is a double copy. 
+
+The short version: the rows tell you what arrives; the absent rows tell you what doesn't; src tells you who to fix when something is missing.
