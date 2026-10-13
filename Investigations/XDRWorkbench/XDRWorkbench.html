@@ -1,0 +1,819 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IR Workbench</title>
+<style>:root{
+  --bg:#f5f6f8; --panel:#fff; --ink:#1a1e24; --muted:#5d6672; --line:#dde1e6; --soft:#eef1f4; --accent:#2f6fde;
+  --hi:#c62828; --med:#d97706; --lo:#2f6fde; --ok:#15803d;
+  --s-process:#7c3aed; --s-network:#0e7490; --s-file:#b45309; --s-registry:#be185d; --s-evtlog:#475569; --s-logon:#15803d;
+  --t-mal:#c62828; --t-sus:#d97706; --t-ben:#15803d; --t-note:#2f6fde;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0e1116; --panel:#161a20; --ink:#e5e8ec; --muted:#98a1ad; --line:#2a3039; --soft:#1d222a; --accent:#6ea0ff;
+  --hi:#ff6b61; --med:#fbbf24; --lo:#6ea0ff; --ok:#4ade80;
+  --s-process:#a78bfa; --s-network:#22d3ee; --s-file:#f59e0b; --s-registry:#f472b6; --s-evtlog:#94a3b8; --s-logon:#4ade80;
+  --t-mal:#ff6b61; --t-sus:#fbbf24; --t-ben:#4ade80; --t-note:#6ea0ff; } }
+:root[data-theme="dark"]{
+  --bg:#0e1116; --panel:#161a20; --ink:#e5e8ec; --muted:#98a1ad; --line:#2a3039; --soft:#1d222a; --accent:#6ea0ff;
+  --hi:#ff6b61; --med:#fbbf24; --lo:#6ea0ff; --ok:#4ade80;
+  --s-process:#a78bfa; --s-network:#22d3ee; --s-file:#f59e0b; --s-registry:#f472b6; --s-evtlog:#94a3b8; --s-logon:#4ade80;
+  --t-mal:#ff6b61; --t-sus:#fbbf24; --t-ben:#4ade80; --t-note:#6ea0ff; }
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:13px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+button,input,select,textarea{font:inherit;color:var(--ink)}
+button{background:var(--soft);border:1px solid var(--line);border-radius:6px;padding:4px 10px;cursor:pointer}
+button:hover{border-color:var(--accent)} button.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+button.sm{padding:1px 7px;font-size:11px}
+input[type=text],input[type=datetime-local],select,textarea{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:4px 8px}
+code,.mono{font-family:ui-monospace,Consolas,"Cascadia Mono",monospace;font-size:12px}
+a.pv{color:inherit;text-decoration:underline dotted var(--muted);cursor:pointer} a.pv:hover{color:var(--accent)}
+header{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
+header h1{margin:0;font-size:15px;font-weight:650} header .meta{color:var(--muted);font-size:12px}
+header .sp{flex:1}
+#bar{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;padding:8px 16px;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:43px;z-index:19}
+#bar label{display:flex;align-items:center;gap:5px;color:var(--muted);white-space:nowrap}
+#q{width:240px}
+#chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:5px;background:var(--soft);border:1px solid var(--line);border-radius:999px;padding:1px 4px 1px 9px;font-size:12px}
+.chip b{font-weight:600;color:var(--muted)} .chip button{border:0;background:none;padding:0 5px;color:var(--muted)}
+#hist{padding:6px 16px 0;background:var(--panel);border-bottom:1px solid var(--line)}
+#hist svg{display:block;width:100%;height:74px;cursor:crosshair;user-select:none}
+#hist .ax{fill:var(--muted);font-size:10px}
+#tabs{display:flex;gap:2px;padding:0 16px;background:var(--panel);border-bottom:1px solid var(--line);overflow-x:auto}
+#tabs button{border:0;border-bottom:2px solid transparent;border-radius:0;background:none;padding:9px 12px;color:var(--muted);white-space:nowrap}
+#tabs button.on{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
+#tabs .ct{font-size:11px;color:var(--muted);margin-left:4px;font-variant-numeric:tabular-nums}
+main{padding:14px 16px 60px;max-width:100%}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;min-width:0}
+.card h3{margin:0 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:14px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;cursor:pointer}
+.stat .v{font-size:20px;font-weight:650;font-variant-numeric:tabular-nums} .stat .k{color:var(--muted);font-size:12px}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th,td{padding:5px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{color:var(--muted);font-weight:500;font-size:12px;position:sticky;top:0;background:var(--panel);white-space:nowrap}
+td.n,th.n{text-align:right} td.t{white-space:nowrap;color:var(--muted)}
+td.wrap{word-break:break-all;max-width:640px}
+tbody tr{cursor:pointer} tbody tr:hover td{background:var(--soft)}
+tr.sel td{background:color-mix(in srgb,var(--accent) 14%,transparent)!important}
+tr.pivot td{box-shadow:inset 0 2px 0 var(--accent)}
+.tw{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:calc(100vh - 290px)}
+.pager{display:flex;gap:8px;align-items:center;margin:8px 0;color:var(--muted)}
+.sec{display:inline-block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;padding:1px 6px;border-radius:4px;color:#fff}
+.sec.process{background:var(--s-process)} .sec.network{background:var(--s-network)} .sec.file{background:var(--s-file)} .sec.registry{background:var(--s-registry)} .sec.evtlog{background:var(--s-evtlog)}
+.fb{display:inline-block;font-size:10px;padding:0 5px;border-radius:4px;margin:0 3px 2px 0;border:1px solid currentColor;white-space:nowrap}
+.fb.high{color:var(--hi)} .fb.med{color:var(--med)} .fb.low{color:var(--lo)}
+.tag{display:inline-block;font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;color:#fff;margin-right:4px}
+.tag.mal{background:var(--t-mal)} .tag.sus{background:var(--t-sus)} .tag.ben{background:var(--t-ben)} .tag.note{background:var(--t-note)}
+.muted{color:var(--muted)} .ext{color:var(--hi);font-weight:600}
+.bad{color:var(--hi)} .ok{color:var(--ok)}
+.find{display:flex;gap:10px;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--line);cursor:pointer}
+.find:last-child{border-bottom:0} .find .c{margin-left:auto;font-variant-numeric:tabular-nums;color:var(--muted)}
+.find .sv{width:8px;height:8px;border-radius:50%;flex:none;transform:translateY(-1px)}
+.sv.high{background:var(--hi)} .sv.med{background:var(--med)} .sv.low{background:var(--lo)}
+.bars .b{display:grid;grid-template-columns:minmax(0,1fr) 60px;gap:8px;padding:3px 0;cursor:pointer;align-items:center}
+.bars .b .l{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bars .b .r{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}
+.bars .b .fill{grid-column:1/3;height:3px;background:var(--accent);border-radius:2px;opacity:.55}
+/* tree */
+.tree{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 10px;overflow:auto;max-height:calc(100vh - 290px)}
+.tree details{margin-left:18px;border-left:1px dotted var(--line);padding-left:6px}
+.tree > details{margin-left:0;border-left:0}
+.tree summary{list-style:none;cursor:pointer;padding:2px 0;white-space:nowrap}
+.tree summary::-webkit-details-marker{display:none}
+.tree summary::before{content:'▸';display:inline-block;width:12px;color:var(--muted)}
+.tree details[open]>summary::before{content:'▾'}
+.tree details.leaf>summary::before{content:'·'}
+.tree .pn{font-weight:600} .tree .pc{color:var(--muted);font-family:ui-monospace,Consolas,monospace;font-size:11.5px;margin-left:6px}
+.tree .act{font-size:11px;color:var(--muted);margin-left:6px}
+.tree .hit>summary{background:color-mix(in srgb,var(--hi) 10%,transparent);border-radius:4px}
+/* drawer */
+#drawer{position:fixed;top:0;right:0;bottom:0;width:min(560px,100vw);background:var(--panel);border-left:1px solid var(--line);box-shadow:-8px 0 24px rgba(0,0,0,.15);z-index:40;transform:translateX(100%);transition:transform .15s;display:flex;flex-direction:column}
+#drawer.open{transform:none}
+#drawer .hd{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line)}
+#drawer .hd h2{margin:0;font-size:14px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#drawer .bd{padding:12px 14px;overflow:auto}
+.kv{display:grid;grid-template-columns:130px minmax(0,1fr);gap:4px 10px;font-size:12.5px}
+.kv dt{color:var(--muted)} .kv dd{margin:0;word-break:break-all}
+.row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.tb button.mal{border-color:var(--t-mal)} .tb button.sus{border-color:var(--t-sus)} .tb button.ben{border-color:var(--t-ben)}
+.tb button.on{color:#fff} .tb button.mal.on{background:var(--t-mal)} .tb button.sus.on{background:var(--t-sus)} .tb button.ben.on{background:var(--t-ben)}
+textarea{width:100%;min-height:70px;resize:vertical}
+h4{margin:14px 0 6px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+/* drop */
+#drop{margin:40px auto;max-width:760px;border:2px dashed var(--line);border-radius:14px;padding:40px 24px;text-align:center;background:var(--panel);cursor:pointer;display:flex;flex-direction:column;gap:10px;align-items:center}
+#drop.over{border-color:var(--accent)} #drop b{font-size:17px}
+#drop .hint{color:var(--muted);max-width:560px}
+.hidden{display:none!important}
+@media (max-width:700px){#q{width:100%} .kv{grid-template-columns:1fr} #bar{position:static} header{position:static}}
+/* grid */
+.gbar{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin:0 0 8px;color:var(--muted)}
+.gbar select{padding:2px 6px}
+th .sh{cursor:pointer;user-select:none;display:inline-flex;gap:4px;align-items:center}
+th .sh:hover{color:var(--ink)} th .ar{font-size:10px;color:var(--accent)}
+tr.fr th{top:31px;padding:3px 4px;background:var(--panel)}
+tr.fr input{width:100%;min-width:60px;padding:2px 6px;font-size:12px;border-radius:4px}
+tr.fr input.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,var(--bg))}
+td.mono{font-family:ui-monospace,Consolas,monospace;font-size:11.5px}
+#pop{position:fixed;z-index:60;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:4px;min-width:200px;max-width:420px}
+#pop .pv0{padding:6px 8px;font-size:12px;color:var(--muted);word-break:break-all;border-bottom:1px solid var(--line);margin-bottom:3px}
+#pop button{display:block;width:100%;text-align:left;border:0;background:none;padding:6px 8px;border-radius:5px}
+#pop button:hover{background:var(--soft)}
+#colpick{position:fixed;z-index:60;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:8px 10px;max-height:70vh;overflow:auto;columns:2;column-gap:18px;min-width:360px}
+#colpick label{display:flex;gap:6px;align-items:center;padding:2px 0;break-inside:avoid;white-space:nowrap}
+.chip.neg{border-color:var(--hi)} .chip.neg b{color:var(--hi)}
+.help{font-size:12px;color:var(--muted)}
+pre.json{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px;white-space:pre-wrap;word-break:break-all;font-size:11.5px;max-height:320px;overflow:auto}
+.sec.module{background:#0f766e}
+:root{--s-module:#0f766e}
+</style>
+</head>
+<body>
+<header>
+  <h1 id="ttl">IR Workbench</h1><span class="meta" id="meta">Cortex XDR host activity · offline</span>
+  <span class="sp"></span>
+  <span class="meta" id="casest"></span>
+  <button id="b-report" class="hidden" title="Download a Markdown report of tagged items and notes">Export report</button>
+  <button id="b-case" class="hidden" title="Download tags + notes as JSON">Export case</button>
+  <button id="b-load" class="hidden" onclick="location.reload()">Load another</button>
+  <button id="b-theme" title="Toggle theme">◐</button>
+</header>
+<div id="bar" class="hidden">
+  <input type="text" id="q" placeholder="Search everything… (Enter)">
+  <label>Host <select id="f-host"></select></label>
+  <label>User <select id="f-user"></select></label>
+  <label>From <input type="datetime-local" id="f-from" step="1"></label>
+  <label>To <input type="datetime-local" id="f-to" step="1"></label>
+  <label title="Alert time: marks the timeline and can scope the window">Alert <input type="datetime-local" id="f-pivot" step="1"></label>
+  <select id="f-win" title="Window around the alert time"><option value="">no window</option><option value="5">±5 min</option><option value="15">±15 min</option><option value="60">±1 h</option><option value="240">±4 h</option><option value="1440">±24 h</option></select>
+  <label title="Hide activity where the acting process (and child/module) is Microsoft-signed"><input type="checkbox" id="f-noms"> Hide MS-signed</label>
+  <label title="Only rows with a heuristic flag"><input type="checkbox" id="f-flagged"> Flagged only</label>
+  <label><input type="checkbox" id="f-tagged"> Tagged only</label>
+  <span id="chips"></span>
+  <button id="f-clear">Clear filters</button>
+</div>
+<div id="hist" class="hidden"></div>
+<nav id="tabs" class="hidden"></nav>
+<main id="main">
+  <label id="drop"><input type="file" id="file" accept=".csv,.tsv,.txt,.json" multiple hidden>
+    <b>Drop the XDR host export here</b>
+    <span class="hint">CSV or TSV from <code>ir-host-export.xql</code>. Several exports (hosts or time slices) can be dropped together. You can also add a case <code>.json</code> to restore your tags and notes. Everything is parsed locally in this browser tab. Nothing is uploaded.</span>
+    <span class="hint" id="dropmsg"></span>
+  </label>
+</main>
+<div id="pop" class="hidden"></div><div id="colpick" class="hidden"></div>
+<aside id="drawer"><div class="hd"><h2 id="dr-t"></h2><button id="dr-x">Close</button></div><div class="bd" id="dr-b"></div></aside>
+<script>(function(){
+'use strict';
+// ================= utils =================
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num = v => { const n = parseFloat(String(v ?? '').replace(/,/g,'')); return isFinite(n) ? n : 0; };
+const fmtN = n => (n ?? 0).toLocaleString();
+const pad = n => String(n).padStart(2,'0');
+const fmtT = ms => { if(ms==null||ms==='') return ''; const d=new Date(ms); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; };
+const toLocalInput = ms => ms==null ? '' : fmtT(ms).replace(' ','T');
+const fromLocalInput = v => { if(!v) return null; const t = new Date(v).getTime(); return isFinite(t) ? t : null; };
+const TZ = (()=>{ const o=-new Date().getTimezoneOffset(); return 'UTC'+(o>=0?'+':'-')+pad(Math.floor(Math.abs(o)/60))+(Math.abs(o)%60?':'+pad(Math.abs(o)%60):''); })();
+function parseT(v){
+  if(v==null||v==='') return null; const s=String(v).trim();
+  if(/^\d{12,14}$/.test(s)) return +s;
+  if(/^\d{9,11}(\.\d+)?$/.test(s)) return Math.round(+s*1000);
+  const t = Date.parse(s.replace(/(\d)(st|nd|rd|th)\b/,'$1'));
+  return isFinite(t) ? t : null;
+}
+const isPriv = ip => /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|127\.|169\.254\.|0\.0\.0\.0|fe80:|fc|fd|::1$|::$)/i.test(ip||'');
+const base = p => String(p||'').split(/[\\/]/).pop();
+const dirOf = p => { p=String(p||''); const i=Math.max(p.lastIndexOf('\\'),p.lastIndexOf('/')); return i>0?p.slice(0,i):''; };
+const extOf = p => { const b=base(p); const i=b.lastIndexOf('.'); return i>0?b.slice(i+1).toLowerCase():''; };
+const lc = s => String(s??'').toLowerCase();
+const trunc = (s,n=160) => { s=String(s??''); return s.length>n ? s.slice(0,n)+'…' : s; };
+function download(name, text, type){ const b=new Blob([text],{type}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),2000); }
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const LS = { get(k,d){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):d; }catch(e){ return d; } }, set(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); return true; }catch(e){ return false; } } };
+
+// ================= parsing =================
+function parseDelim(text){
+  text=text.replace(/^\uFEFF/,'');
+  const nl=text.indexOf('\n'), first=text.slice(0,nl>0?nl:text.length);
+  const d=(first.split('\t').length>first.split(',').length)?'\t':',';
+  const rows=[]; let row=[],f='',q=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){f+='"';i++;} else q=false; } else f+=c; }
+    else if(c==='"' && f==='') q=true;
+    else if(c===d){ row.push(f); f=''; }
+    else if(c==='\n'||c==='\r'){ if(c==='\r'&&text[i+1]==='\n') i++; row.push(f); f=''; if(row.length>1||row[0]!=='') rows.push(row); row=[]; }
+    else f+=c;
+  }
+  if(f!==''||row.length){ row.push(f); rows.push(row); }
+  const hdr=(rows.shift()||[]).map(h=>h.trim().toLowerCase());
+  return {hdr, rows};
+}
+const COLS = ['host','section','sub','user','proc','pid','proc_path','proc_cmd','proc_sha256','proc_signer','proc_sig','cgo','cgo_cmd','aiid','child','child_pid','child_path','child_cmd','child_sha256','child_signer','child_sig','ciid','rip','rport','domain','file','file_prev','file_sha256','reg_key','reg_value','reg_data','module','module_sha256','module_signer','module_sig','evid','ev_user','ev_domain','ev_logon_type','ev_ip','ev_ws','ev_subject','ev_proc','ev_auth','ev_obj','ev_obj2','ev_json','ev_msg','n','first_ms','last_ms'];
+const ALIAS = {host:['host','agent_hostname'],first_ms:['first_ms','first_seen','_time','time'],last_ms:['last_ms','last_seen'],section:['section','event_type']};
+// every row inherits '' for absent fields, so sparse rows stay small in memory
+const DEF = Object.fromEntries(COLS.map(c=>[c,'']));  // not frozen: frozen props would block assignment on rows
+
+const EVCAT = {4624:'logon',4625:'logon',4634:'logon',4647:'logon',4648:'logon',4672:'logon',4778:'logon',4779:'logon',
+  4720:'account',4722:'account',4724:'account',4725:'account',4726:'account',4728:'account',4732:'account',4738:'account',4740:'account',4756:'account',
+  4768:'kerberos',4769:'kerberos',4771:'kerberos',4776:'kerberos',1102:'cleared',104:'cleared',7045:'persistence',4697:'persistence',4698:'persistence',4699:'persistence',4702:'persistence',5140:'share',5145:'share'};
+const EVNAME = {4624:'Logon',4625:'Failed logon',4634:'Logoff',4647:'User logoff',4648:'Explicit-credential logon',4672:'Special privileges',4778:'RDP reconnect',4779:'RDP disconnect',
+  4720:'User created',4722:'User enabled',4724:'Password reset',4725:'User disabled',4726:'User deleted',4728:'Added to global group',4732:'Added to local group',4738:'User changed',4740:'Account locked',4756:'Added to universal group',
+  4768:'Kerberos TGT',4769:'Kerberos service ticket',4771:'Kerberos pre-auth failed',4776:'NTLM validation',1102:'Security log cleared',104:'Event log cleared',
+  7045:'Service installed',4697:'Service installed',4698:'Scheduled task created',4699:'Scheduled task deleted',4702:'Scheduled task updated',5140:'Share accessed',5145:'Share object checked'};
+const LTYPE = {2:'Interactive',3:'Network',4:'Batch',5:'Service',7:'Unlock',8:'NetworkCleartext',9:'NewCredentials',10:'RemoteInteractive (RDP)',11:'CachedInteractive'};
+const BROWSERS = new Set(['chrome.exe','msedge.exe','firefox.exe','iexplore.exe','brave.exe','opera.exe','vivaldi.exe','msedgewebview2.exe']);
+
+
+// ================= summaries =================
+function summary(r){
+  switch(r.sec){
+    case 'process': return `${r.proc||'?'} → ${r.child||base(r.child_path)}  ${r.child_cmd||''}`;
+    case 'network': return `${r.proc||'?'} → ${r.domain?r.domain+' ':''}${r.rip}${r.rport?':'+r.rport:''}`;
+    case 'file': return `${r.subn||'file'}  ${r.file}${r.file_prev?'  (from '+r.file_prev+')':''}`;
+    case 'registry': return `${r.subn||'set'}  ${r.reg_key}${r.reg_value?'\\'+r.reg_value:''}${r.reg_data?' = '+r.reg_data:''}`;
+    case 'evtlog': {
+      const nm=EVNAME[r.evid]||('Event '+r.evid), lt=r.ev_logon_type?(' type '+r.ev_logon_type+(LTYPE[r.ev_logon_type]?' '+LTYPE[r.ev_logon_type]:'')):'';
+      if(r.cat==='logon'||r.cat==='kerberos') return `${nm}: ${r.ev_domain?r.ev_domain+'\\':''}${r.ev_user||'?'}${lt}${r.ev_ip&&r.ev_ip!=='-'?' from '+r.ev_ip:''}${r.ev_ws?' ('+r.ev_ws+')':''}${r.ev_obj2&&r.evid===4625?' · '+r.ev_obj2:''}`;
+      if(r.cat==='account') return `${nm}: ${r.ev_user||r.ev_obj||'?'}${r.ev_subject?' by '+r.ev_subject:''}${r.ev_obj&&r.ev_obj!==r.ev_user?' · '+r.ev_obj:''}`;
+      if(r.cat==='persistence') return `${nm}: ${r.ev_obj||'?'}${r.ev_obj2?' → '+r.ev_obj2:''}${r.ev_subject?' by '+r.ev_subject:''}`;
+      if(r.cat==='cleared') return `${nm}${r.ev_subject?' by '+r.ev_subject:''}`;
+      if(r.cat==='share') return `${nm}: ${r.ev_obj||''}${r.ev_obj2?'\\'+r.ev_obj2:''} by ${r.ev_subject||r.ev_user||'?'}${r.ev_ip?' from '+r.ev_ip:''}`;
+      return `${nm} ${r.ev_user||''} ${r.ev_obj||''}`;
+    }
+  }
+  return '';
+}
+
+// ================= findings =================
+const UW = /\\(users\\[^\\]+\\(appdata|downloads|desktop|documents|music|pictures|videos)|users\\public|programdata|windows\\temp|temp|perflogs|\$recycle\.bin)\\/i;
+const SHELLS = /^(cmd|powershell|pwsh|wscript|cscript|mshta|rundll32|regsvr32|wmic|certutil|bitsadmin|msbuild|installutil|forfiles|conhost)\.exe$/i;
+const OFFICE = /^(winword|excel|powerpnt|outlook|onenote|msaccess|mspub|visio|acrord32|acrobat|foxitreader|wordpad)\.exe$/i;
+const LOLNET = /^(powershell|pwsh|rundll32|regsvr32|mshta|wscript|cscript|certutil|bitsadmin|msbuild|installutil|cmstp|msiexec|curl|wget|bash|python|pythonw|node)\.exe$/i;
+const signedMs = (signer,sig) => /microsoft/i.test(signer||'') && /signed/i.test(sig||'') && !/unsigned|invalid/i.test(sig||'');
+const unsigned = sig => /unsigned|invalid|untrusted/i.test(sig||'');
+const RULES = [
+  {id:'ps-enc',sev:'high',t:'PowerShell encoded / hidden command',sec:'process',f:r=>/^(powershell|pwsh)\.exe$/i.test(r.child)&&/\s-(e|en|enc|enco|encodedcommand)\s+[a-z0-9+\/=]{16,}|-w(indowstyle)?\s+hid/i.test(r.child_cmd)},
+  {id:'ps-dl',sev:'high',t:'PowerShell download cradle',sec:'process',f:r=>/(downloadstring|downloadfile|downloaddata|net\.webclient|invoke-webrequest|\biwr\b|invoke-restmethod|\birm\b|start-bitstransfer|frombase64string)/i.test(r.child_cmd)},
+  {id:'lolbin',sev:'high',t:'LOLBin download / proxy execution',sec:'process',f:r=>/certutil(\.exe)?\s.*(-urlcache|-decode|-f\s+http)|mshta(\.exe)?\s+(http|javascript|vbscript)|regsvr32(\.exe)?\s.*\/i:(http|\S+\.sct)|rundll32(\.exe)?\s.*(javascript:|\\users\\|\\programdata\\|\\temp\\|,#\d)|bitsadmin(\.exe)?\s.*\/transfer|msiexec(\.exe)?\s.*\/q.*http|cmstp(\.exe)?\s.*\/s|forfiles.*\/c|wmic(\.exe)?\s.*process\s+call\s+create/i.test(r.child_cmd)},
+  {id:'office-shell',sev:'high',t:'Office / reader / browser spawned a shell',sec:'process',f:r=>(OFFICE.test(r.proc)||BROWSERS.has(lc(r.proc)))&&SHELLS.test(r.child||'')},
+  {id:'cred',sev:'high',t:'Credential access tooling',sec:'process',f:r=>/lsass|comsvcs(\.dll)?.*minidump|sekurlsa|mimikatz|procdump.*-ma|reg(\.exe)?\s+save\s+hklm\\(sam|system|security)|ntdsutil.*ifm|vssadmin.*create\s+shadow|\\ntds\.dit|dcsync|lsadump|nanodump|pypykatz/i.test(r.child_cmd)},
+  {id:'evasion',sev:'high',t:'Defense evasion / recovery inhibition',sec:'process',f:r=>/vssadmin.*delete|wbadmin.*delete|bcdedit.*(recoveryenabled|bootstatuspolicy)|wevtutil(\.exe)?\s+(cl|clear-log)|set-mppreference.*-disable|add-mppreference.*-exclusion|netsh.*(advfirewall.*state\s+off|firewall.*disable)|fsutil.*usn.*deletejournal|sc(\.exe)?\s+(stop|config).*(windefend|sense|cyserver|cortex)/i.test(r.child_cmd)},
+  {id:'lateral',sev:'med',t:'Remote execution / lateral movement tooling',sec:'process',f:r=>/psexec|paexec|\bwinrs\b|wmic(\.exe)?\s+\/node:|invoke-command\s.*-computername|enter-pssession|\bsc(\.exe)?\s+\\\\|schtasks(\.exe)?\s.*\/s\s|impacket|smbexec|atexec/i.test(r.child_cmd)},
+  {id:'persist-cmd',sev:'med',t:'Persistence created from command line',sec:'process',f:r=>/schtasks(\.exe)?\s.*\/create|\bsc(\.exe)?\s+create|new-service|reg(\.exe)?\s+add\s.*\\(run|runonce|winlogon|image file execution options)|new-scheduledtask|register-scheduledtask|wmic.*eventfilter/i.test(r.child_cmd)},
+  {id:'acct-cmd',sev:'high',t:'Account / group change from command line',sec:'process',f:r=>/net1?(\.exe)?\s+(user\s+\S+\s+\S+\s+\/add|user\s+.*\/add|localgroup\s+(administrators|"remote desktop users")\s+.*\/add|group\s+.*\/add\s+\/domain)|add-localgroupmember|new-localuser|new-aduser|add-adgroupmember/i.test(r.child_cmd)},
+  {id:'discovery',sev:'low',t:'Discovery commands',sec:'process',f:r=>/^(whoami|nltest|systeminfo|ipconfig|quser|qwinsta|arp|route|netstat|tasklist|adfind|nslookup|klist|dsquery|csvde)\.exe$/i.test(r.child)||/\bnet1?(\.exe)?\s+(user|group|localgroup|view|share|session|accounts)\b|domain admins|get-ad(user|computer|group)|get-netdomain|invoke-sharefinder/i.test(r.child_cmd)},
+  {id:'tunnel',sev:'high',t:'Remote access / tunneling / exfil tool',sec:'process',f:r=>/rclone|cloudflared|ngrok|chisel|plink|anydesk|screenconnect|atera|splashtop|teamviewer|meshagent|tailscale|zerotier|mega(cmd|sync)|winscp|filezilla|\bfrp[cs]?\b|ligolo|revsocks/i.test((r.child||'')+' '+(r.child_cmd||''))},
+  {id:'uw-exec',sev:'med',t:'Process launched from user-writable path',sec:'process',f:r=>UW.test(r.child_path||'')&&!signedMs(r.child_signer,r.child_sig)},
+  {id:'unsigned',sev:'low',t:'Unsigned / invalid-signature process',sec:'process',f:r=>unsigned(r.child_sig)},
+  {id:'net-lol',sev:'high',t:'Script host / LOLBin talking to the internet',sec:'network',f:r=>r.ext&&LOLNET.test(r.proc||'')},
+  {id:'net-unsigned',sev:'med',t:'Unsigned process talking to the internet',sec:'network',f:r=>r.ext&&unsigned(r.proc_sig)},
+  {id:'net-uw',sev:'med',t:'Process in user-writable path talking to the internet',sec:'network',f:r=>r.ext&&UW.test(r.proc_path||'')},
+  {id:'net-rdp-smb',sev:'med',t:'Outbound RDP / SMB / WinRM / SSH',sec:'network',f:r=>/^(3389|445|5985|5986|22|135)$/.test(String(r.rport))&&!/sub accept|accept/.test(r.subn)},
+  {id:'file-drop',sev:'med',t:'Executable or script written to user-writable path',sec:'file',f:r=>/\.(exe|dll|scr|ps1|bat|cmd|vbs|vbe|js|jse|hta|wsf|msi|sys|jar|py)$/i.test(r.file||'')&&UW.test(r.file||'')&&!/remove|delete/.test(r.subn)},
+  {id:'file-startup',sev:'high',t:'File written to Startup / Tasks folder',sec:'file',f:r=>/\\startup\\|\\system32\\tasks\\/i.test(r.file||'')&&!/remove|delete/.test(r.subn)},
+  {id:'file-archive',sev:'low',t:'Archive / disk image created',sec:'file',f:r=>/\.(zip|7z|rar|iso|img|vhdx?)$/i.test(r.file||'')&&!/remove|delete/.test(r.subn)},
+  {id:'reg-run',sev:'high',t:'Autorun / service / IFEO registry change',sec:'registry',f:r=>/\\currentversion\\run|\\winlogon|image file execution options|\\currentcontrolset\\services\\[^\\]+$|\\shell\\open\\command|\\schedule\\taskcache/i.test(r.reg_key||'')&&!signedMs(r.proc_signer,r.proc_sig)},
+  {id:'reg-def',sev:'high',t:'Defender / LSA / RDP policy registry change',sec:'registry',f:r=>/\\windows defender\\|\\control\\lsa|\\terminal server|\\policies\\.*(disable|defender)/i.test(r.reg_key||'')&&!signedMs(r.proc_signer,r.proc_sig)},
+  {id:'ev-clear',sev:'high',t:'Event log cleared',sec:'evtlog',f:r=>r.cat==='cleared'},
+  {id:'ev-svc',sev:'med',t:'Service installed',sec:'evtlog',f:r=>r.evid===7045||r.evid===4697},
+  {id:'ev-task',sev:'med',t:'Scheduled task created / changed',sec:'evtlog',f:r=>r.evid===4698||r.evid===4702},
+  {id:'ev-acct',sev:'high',t:'Account created / added to group',sec:'evtlog',f:r=>[4720,4728,4732,4756,4724].includes(r.evid)},
+  {id:'ev-rdp',sev:'med',t:'RDP logon',sec:'evtlog',f:r=>r.evid===4624&&r.ev_logon_type==='10'},
+  {id:'ev-explicit',sev:'med',t:'Explicit-credential logon (runas / pass-the-creds)',sec:'evtlog',f:r=>r.evid===4648&&!/\$$/.test(r.ev_user||'')},
+  {id:'ev-ntlm-net',sev:'low',t:'Network logon via NTLM',sec:'evtlog',f:r=>r.evid===4624&&r.ev_logon_type==='3'&&/ntlm/i.test(r.ev_auth||'')&&!/anonymous/i.test(r.ev_user||'')},
+  {id:'ev-fail',sev:'med',t:'Failed logons (≥5 for one user or source)',sec:'evtlog',agg:true},
+];
+const RMAP = Object.fromEntries(RULES.map(x=>[x.id,x]));
+function runFindings(rows){
+  const hits={}; RULES.forEach(x=>hits[x.id]=[]);
+  for(const r of rows){ r.f=[]; for(const x of RULES){ if(!x.agg && x.sec===r.sec && x.f(r)){ r.f.push(x.id); hits[x.id].push(r); } } }
+  const fails=rows.filter(r=>r.evid===4625||r.evid===4771), byU={}, byI={};
+  fails.forEach(r=>{ const u=lc(r.ev_user), ip=r.ev_ip||''; byU[u]=(byU[u]||0)+r.n; if(ip&&ip!=='-') byI[ip]=(byI[ip]||0)+r.n; });
+  fails.forEach(r=>{ if(byU[lc(r.ev_user)]>=5||(r.ev_ip&&byI[r.ev_ip]>=5)){ r.f.push('ev-fail'); hits['ev-fail'].push(r); } });
+  return hits;
+}
+
+
+// ================= rows =================
+function normSec(v){ v=lc(v).replace(/^enum\./,''); if(/module|load|image/.test(v)) return 'module'; if(/proc/.test(v)) return 'process'; if(/net/.test(v)) return 'network'; if(/file/.test(v)) return 'file'; if(/reg/.test(v)) return 'registry'; if(/ev|log/.test(v)) return 'evtlog'; return v||'other'; }
+function normSub(v){ return lc(v).replace(/^enum\./,'').replace(/^(process|network|file|registry|load_image|event_log)_/,'').replace(/_/g,' '); }
+function clean(v){ v=String(v??'').trim(); return (v==='-'||v==='null'||v==='NULL'||v==='[]'||v==='{}'||v==='""')?'':v; }
+function hash(s){ let h=2166136261>>>0; for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619)>>>0; } return h.toString(36); }
+function rowKey(r){ return hash([r.host,r.sec,r.t0,r.aiid,r.ciid,r.child_cmd,r.file,r.reg_key,r.reg_value,r.rip,r.rport,r.domain,r.module,r.evid,r.ev_user,r.ev_ip].join('|')); }
+function toRows(p){
+  const idx={}; COLS.forEach(c=>{ const names=ALIAS[c]||[c]; for(const n of names){ const i=p.hdr.indexOf(n); if(i>=0){ idx[c]=i; break; } } });
+  if(idx.section==null) throw new Error('This file has no "section" column. Is it the ir-host-export.xql output? Columns seen: '+p.hdr.slice(0,12).join(', '));
+  const out=[], ent=Object.entries(idx);
+  for(const a of p.rows){
+    const r=Object.create(DEF);
+    for(const [c,i] of ent){ const v=clean(a[i]); if(v) r[c]=v; }
+    r.sec=normSec(r.section); r.subn=normSub(r.sub);
+    r.t0=parseT(r.first_ms); r.t1=parseT(r.last_ms)??r.t0; r.n=num(r.n)||1; r.evid=num(r.evid)||0;
+    r.cat = r.sec==='evtlog' ? (EVCAT[r.evid]||'other') : '';
+    r.ext = !!r.rip && !isPriv(r.rip);
+    r.who = r.sec==='evtlog' ? (r.ev_user||r.ev_subject||r.user) : r.user;
+    r.wk = lc(r.who).split('\\').pop();
+    out.push(r);
+  }
+  return out;
+}
+const summ = r => r.sec==='module' ? `${r.proc||'?'} loaded ${r.module}` : summary(r);
+const isStart = r => r.sec==='process' && (!r.subn || /start/.test(r.subn));
+const AUTORUN = /\\currentversion\\(run|runonce|policies\\explorer\\run)|\\winlogon|image file execution options|\\currentcontrolset\\services\\[^\\]+\\(imagepath|servicedll|start)?$|\\shell\\open\\command|\\schedule\\taskcache|\\active setup\\installed components|\\appinit_dlls|\\bootexecute|\\wmi\\autologger/i;
+const isPersist = r => (r.sec==='evtlog'&&(r.cat==='persistence'||r.cat==='account'||r.cat==='cleared'))
+  || (r.sec==='registry'&&AUTORUN.test(r.reg_key+'\\'+r.reg_value))
+  || (r.sec==='file'&&/\\startup\\|\\system32\\tasks\\/i.test(r.file))
+  || (r.f&&r.f.some(id=>id==='persist-cmd'||id==='acct-cmd'));
+
+// ================= columns =================
+const LT = t => t ? t+(LTYPE[t]?' '+LTYPE[t]:'') : '';
+const signTxt = (s,g) => { let o=s||''; if(unsigned(g)) o=(o?o+' · ':'')+'UNSIGNED'; else if(!o&&g) o=g; return o; };
+const tagName = r => { const t=S.C.tags[r.key]; return t ? ({mal:'malicious',sus:'suspicious',ben:'benign'}[t.tag]||'')+(t.note?' note':'') : ''; };
+const tagCell = r => { const t=S.C.tags[r.key]; return (t&&t.tag?`<span class="tag ${t.tag}">${{mal:'MAL',sus:'SUS',ben:'OK'}[t.tag]}</span>`:'')+(t&&t.note?'<span class="tag note">NOTE</span>':''); };
+const fcell = r => r.f.map(id=>`<span class="fb ${RMAP[id].sev}" title="${esc(RMAP[id].t)}">${esc(id)}</span>`).join('');
+const CD = {
+  time:{h:'Time',get:r=>r.t0,txt:r=>fmtT(r.t0),num:1,c:'t',nolink:1},
+  last:{h:'Last seen',get:r=>r.t1,txt:r=>fmtT(r.t1),num:1,c:'t',nolink:1},
+  n:{h:'Count',get:r=>r.n,num:1,c:'n',nolink:1},
+  host:{h:'Host',get:r=>r.host},
+  type:{h:'Type',get:r=>r.sec==='evtlog'?(r.cat||'evtlog'):r.sec,html:r=>`<span class="sec ${r.sec}">${esc(r.sec==='evtlog'?(r.cat||'log'):r.sec)}</span>`},
+  sub:{h:'Sub-type',get:r=>r.subn},
+  user:{h:'User',get:r=>r.who},
+  proc:{h:'Process',get:r=>r.proc},
+  pid:{h:'PID',get:r=>r.pid,num:1},
+  proc_path:{h:'Process path',get:r=>r.proc_path,c:'mono'},
+  proc_cmd:{h:'Process cmd',get:r=>r.proc_cmd,c:'mono wrap'},
+  proc_signer:{h:'Process signer',get:r=>signTxt(r.proc_signer,r.proc_sig)},
+  proc_sha:{h:'Process SHA256',get:r=>r.proc_sha256,c:'mono'},
+  cgo:{h:'Causality (CGO)',get:r=>r.cgo},
+  cgo_cmd:{h:'CGO cmd',get:r=>r.cgo_cmd,c:'mono wrap'},
+  child:{h:'Child process',get:r=>r.child},
+  child_pid:{h:'Child PID',get:r=>r.child_pid,num:1},
+  child_path:{h:'Child path',get:r=>r.child_path,c:'mono'},
+  child_cmd:{h:'Command line',get:r=>r.child_cmd,c:'mono wrap'},
+  child_signer:{h:'Child signer',get:r=>signTxt(r.child_signer,r.child_sig)},
+  child_sha:{h:'Child SHA256',get:r=>r.child_sha256,c:'mono'},
+  rip:{h:'Remote IP',get:r=>r.rip},
+  rport:{h:'Port',get:r=>r.rport,num:1},
+  scope:{h:'Scope',get:r=>r.rip?(r.ext?'external':'internal'):''},
+  domain:{h:'Domain',get:r=>r.domain},
+  file:{h:'File path',get:r=>r.file,c:'mono wrap'},
+  file_name:{h:'File name',get:r=>base(r.file)},
+  file_ext:{h:'Ext',get:r=>extOf(r.file)},
+  file_dir:{h:'Folder',get:r=>dirOf(r.file),c:'mono wrap'},
+  file_prev:{h:'Previous path',get:r=>r.file_prev,c:'mono wrap'},
+  file_sha:{h:'File SHA256',get:r=>r.file_sha256,c:'mono'},
+  reg_key:{h:'Registry key',get:r=>r.reg_key,c:'mono wrap'},
+  reg_value:{h:'Value name',get:r=>r.reg_value,c:'mono'},
+  reg_data:{h:'Value data',get:r=>r.reg_data,c:'mono wrap'},
+  module:{h:'Module path',get:r=>r.module,c:'mono wrap'},
+  module_name:{h:'Module',get:r=>base(r.module)},
+  module_signer:{h:'Module signer',get:r=>signTxt(r.module_signer,r.module_sig)},
+  module_sha:{h:'Module SHA256',get:r=>r.module_sha256,c:'mono'},
+  evid:{h:'Event ID',get:r=>r.evid||'',num:1},
+  evname:{h:'Event',get:r=>r.evid?(EVNAME[r.evid]||''):''},
+  ev_user:{h:'Target user',get:r=>r.ev_user?((r.ev_domain?r.ev_domain+'\\':'')+r.ev_user):''},
+  ev_logon_type:{h:'Logon type',get:r=>LT(r.ev_logon_type)},
+  ev_ip:{h:'Source IP',get:r=>r.ev_ip},
+  ev_ws:{h:'Workstation',get:r=>r.ev_ws},
+  ev_subject:{h:'Subject user',get:r=>r.ev_subject},
+  ev_auth:{h:'Auth package',get:r=>r.ev_auth},
+  ev_proc:{h:'Logon process',get:r=>r.ev_proc},
+  ev_obj:{h:'Object',get:r=>r.ev_obj},
+  ev_obj2:{h:'Object detail',get:r=>r.ev_obj2,c:'wrap'},
+  ev_msg:{h:'Message',get:r=>r.ev_msg,c:'wrap'},
+  what:{h:'Activity',get:summ,c:'wrap'},
+  flags:{h:'Flags',get:r=>r.f.join(' '),html:fcell,nolink:1},
+  tag:{h:'Tag',get:tagName,html:tagCell,nolink:1},
+  aiid:{h:'Process instance',get:r=>r.aiid,c:'mono'},
+  ciid:{h:'Child instance',get:r=>r.ciid,c:'mono'},
+};
+const cellTxt = (c,r) => { const d=CD[c]; return d.txt ? d.txt(r) : String(d.get(r)??''); };
+
+// ================= tabs =================
+const TABS = [
+  {id:'overview',l:'Overview'},
+  {id:'all',l:'All events',pred:()=>true,cols:['time','n','host','type','user','proc','what','flags','tag']},
+  {id:'process',l:'Processes',pred:r=>r.sec==='process',cols:['time','user','proc','child','child_cmd','child_signer','sub','flags','tag'],tree:1},
+  {id:'network',l:'Network',pred:r=>r.sec==='network',cols:['time','last','n','user','proc','rip','rport','scope','domain','sub','flags']},
+  {id:'web',l:'Web / domains',pred:r=>r.sec==='network'&&!!r.domain,cols:['time','last','n','proc','domain','rip','rport','user'],group:'domain'},
+  {id:'file',l:'Files',pred:r=>r.sec==='file',cols:['time','n','user','proc','sub','file','file_ext','file_sha','flags']},
+  {id:'registry',l:'Registry',pred:r=>r.sec==='registry',cols:['time','n','user','proc','sub','reg_key','reg_value','reg_data','flags']},
+  {id:'module',l:'Modules',pred:r=>r.sec==='module',cols:['time','n','proc','module_name','module','module_signer','module_sha']},
+  {id:'logons',l:'Logons',pred:r=>r.cat==='logon'||r.cat==='kerberos',cols:['time','n','evid','evname','ev_user','ev_logon_type','ev_ip','ev_ws','ev_auth','ev_proc']},
+  {id:'evtlog',l:'Event log',pred:r=>r.sec==='evtlog',cols:['time','n','evid','evname','ev_user','ev_subject','ev_obj','ev_obj2','ev_msg']},
+  {id:'persist',l:'Autoruns & accounts',pred:isPersist,cols:['time','host','type','user','proc','what','flags','tag']},
+  {id:'tagged',l:'Tagged',pred:r=>!!S.C.tags[r.key],cols:['time','host','type','user','proc','what','tag'],all:1},
+];
+const TABM = Object.fromEntries(TABS.map(t=>[t.id,t]));
+const COLS_FOR = { // columns offered in the chooser per tab (in addition to generic ones)
+  generic:['time','last','n','host','type','sub','user','proc','pid','proc_path','proc_cmd','proc_signer','proc_sha','cgo','cgo_cmd','aiid','what','flags','tag'],
+  process:['child','child_pid','child_path','child_cmd','child_signer','child_sha','ciid'],
+  network:['rip','rport','scope','domain'], web:['rip','rport','scope','domain'],
+  file:['file','file_name','file_ext','file_dir','file_prev','file_sha'],
+  registry:['reg_key','reg_value','reg_data'], module:['module','module_name','module_signer','module_sha'],
+  logons:['evid','evname','ev_user','ev_logon_type','ev_ip','ev_ws','ev_subject','ev_auth','ev_proc','ev_obj','ev_obj2','ev_msg'],
+  evtlog:['evid','evname','ev_user','ev_logon_type','ev_ip','ev_ws','ev_subject','ev_auth','ev_proc','ev_obj','ev_obj2','ev_msg'],
+};
+const colsFor = id => { const x=COLS_FOR[id]; return x ? [...new Set([...COLS_FOR.generic,...x])] : Object.keys(CD); };
+
+// ================= state =================
+const S = {rows:[],hosts:[],users:[],tmin:0,tmax:0,hits:{},byCiid:new Map(),act:new Map(),
+  f:{q:'',host:'',user:'',from:null,to:null,chips:[],noms:false,flagged:false,tagged:false},
+  tab:'overview',sel:null,caseKey:'',C:null,G:{},pmode:'tree',src:''};
+const GKEY='ir-grid-v2';
+function grid(id){
+  if(!S.G[id]){ const t=TABM[id], saved=LS.get(GKEY,{})[id]||{};
+    S.G[id]={cols:(saved.cols||t.cols).filter(c=>CD[c]),sort:saved.sort||{c:'time',d:1},size:saved.size||250,cf:{},group:t.group||'',gsort:{c:'rows',d:-1},page:0}; }
+  return S.G[id];
+}
+function saveGrid(id){ const all=LS.get(GKEY,{}), g=S.G[id]; all[id]={cols:g.cols,sort:g.sort,size:g.size}; LS.set(GKEY,all); }
+
+// ================= case (tags/notes) =================
+function blankCase(){ return {version:2,title:'',notes:'',pivot:null,win:'',tags:{},updated:null}; }
+let persistOK=true, dirty=false;
+function saveCase(){ S.C.updated=new Date().toISOString(); persistOK=LS.set(S.caseKey,S.C); dirty=true; caseStatus(); }
+function caseStatus(){ const n=Object.keys(S.C.tags).length; $('#casest').textContent=`${n} tagged`+(persistOK?' · autosaved in this browser':' · NOT persisted, use Export case')+(dirty?' · not exported':''); }
+function mergeCase(o){ const b=blankCase(); for(const k in b) if(o&&o[k]!=null) b[k]=o[k]; return b; }
+function alertMsg(s){ $('#casest').textContent=s; }
+
+// ================= global filters =================
+function winBounds(){ const f=S.f; let from=f.from,to=f.to; const w=+S.C.win; if(S.C.pivot&&w){ from=S.C.pivot-w*60000; to=S.C.pivot+w*60000; } return [from,to]; }
+function blob(r){ if(r._b==null){ let s=''; for(const k in r){ if(k[0]!=='_'&&typeof r[k]==='string') s+=r[k]+' '; } r._b=lc(s+summ(r)); } return r._b; }
+function chipTest(c){ const v=lc(c.v);
+  if(c.c==='aiid') return r=>lc(r.aiid)===v||lc(r.ciid)===v;
+  if(c.c==='user') return r=>r.wk===v||lc(r.who)===v;
+  if(c.c==='sha') return r=>[r.proc_sha256,r.child_sha256,r.file_sha256,r.module_sha256].some(h=>lc(h)===v);
+  const d=CD[c.c]; return r=>lc(cellTxt(c.c,r))===v; }
+function globalFiltered(){
+  const f=S.f, [from,to]=winBounds(), q=lc(f.q).trim();
+  const chips=f.chips.map(c=>{ const t=chipTest(c); return c.neg?(r=>!t(r)):t; });
+  return S.rows.filter(r=>{
+    if(f.host && r.host!==f.host) return false;
+    if(f.user && r.wk!==f.user) return false;
+    if(from!=null && (r.t1??r.t0)<from) return false;
+    if(to!=null && r.t0>to) return false;
+    if(f.flagged && !r.f.length) return false;
+    if(f.tagged && !S.C.tags[r.key]) return false;
+    for(const t of chips) if(!t(r)) return false;
+    if(f.noms && r.sec!=='evtlog' && !S.C.tags[r.key]){
+      const a=signedMs(r.proc_signer,r.proc_sig);
+      if(r.sec==='process'){ if(a&&signedMs(r.child_signer,r.child_sig)) return false; }
+      else if(r.sec==='module'){ if(signedMs(r.module_signer,r.module_sig)) return false; }
+      else if(a) return false; }
+    if(q && !blob(r).includes(q)) return false;
+    return true;
+  });
+}
+function addChip(c,v,neg=false){ if(v===''||v==null) return; v=String(v); const i=S.f.chips.findIndex(x=>x.c===c&&lc(x.v)===lc(v)); if(i>=0) S.f.chips.splice(i,1); S.f.chips.push({c,v,neg}); Object.values(S.G).forEach(g=>g.page=0); render(); }
+const CHIPN = c => c==='aiid'?'process instance':c==='sha'?'any hash':(CD[c]?.h||c);
+
+// ================= column filters =================
+function cfFn(expr,col){
+  expr=String(expr||'').trim(); if(!expr) return null;
+  let neg=false; if(expr[0]==='!'&&expr.length>1){ neg=true; expr=expr.slice(1).trim(); }
+  let f; const d=CD[col];
+  if(expr==='='||expr==='""') f=v=>v===''||v==null;
+  else if(expr==='*') f=v=>v!==''&&v!=null;
+  else if(/^\/.+\/$/.test(expr)){ let re; try{ re=new RegExp(expr.slice(1,-1),'i'); }catch(e){ return null; } f=v=>re.test(v); }
+  else if(d.num && col!=='time' && col!=='last' && /^(>=|<=|>|<)\s*-?\d+(\.\d+)?$/.test(expr)){ const m=expr.match(/^(>=|<=|>|<)\s*(.+)$/), x=+m[2]; f={'>':v=>num(v)>x,'<':v=>num(v)<x,'>=':v=>num(v)>=x,'<=':v=>num(v)<=x}[m[1]]; }
+  else if(expr[0]==='='){ const x=lc(expr.slice(1)); f=v=>lc(v)===x; }
+  else { const parts=lc(expr).split('|').map(s=>s.trim()).filter(Boolean); f=v=>{ const s=lc(v); return parts.some(p=>s.includes(p)); }; }
+  return neg ? v=>!f(v) : f;
+}
+function tabRows(id,base){
+  const t=TABM[id], g=grid(id); let R=(t.all?S.rows:base).filter(t.pred);
+  const fs=Object.entries(g.cf).map(([c,e])=>[c,cfFn(e,c)]).filter(x=>x[1]&&CD[x[0]]);
+  if(fs.length) R=R.filter(r=>fs.every(([c,fn])=>fn(cellTxt(c,r))));
+  return R;
+}
+function sortRows(R,s){
+  const d=CD[s.c]||CD.time, dir=s.d||1;
+  const key = d.num ? (r=>{ const v=d.get(r); return v===''||v==null?-Infinity:+v; }) : (r=>lc(cellTxt(s.c,r)));
+  const K=R.map(r=>[key(r),r]);
+  K.sort((a,b)=> (a[0]<b[0]?-1:a[0]>b[0]?1:(a[1].t0-b[1].t0)) * (a[0]===b[0]?1:dir));
+  return K.map(x=>x[1]);
+}
+
+// ================= histogram =================
+const SECS = ['process','network','file','registry','module','evtlog'];
+const secColor = k => css('--s-'+k) || '#0f766e';
+function drawHist(F){
+  const el=$('#hist'), W=Math.max(300,el.clientWidth-32), H=74, top=4, bot=16, bins=Math.min(140,Math.max(30,Math.floor(W/8)));
+  const [from,to]=winBounds(), lo=S.tmin, hi=Math.max(S.tmax,S.tmin+60000), span=hi-lo, bw=span/bins;
+  const cnt=Array.from({length:bins},()=>({t:0}));
+  for(const r of F){ if(r.t0==null) continue; const b=Math.min(bins-1,Math.max(0,Math.floor((r.t0-lo)/bw))); cnt[b][r.sec]=(cnt[b][r.sec]||0)+r.n; cnt[b].t+=r.n; }
+  const max=Math.max(1,...cnt.map(c=>c.t)), bwpx=W/bins;
+  let s=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" id="hsvg">`;
+  if(from!=null||to!=null){ const a=Math.max(0,((from??lo)-lo)/span*W), b=Math.min(W,((to??hi)-lo)/span*W); s+=`<rect x="${a}" y="0" width="${Math.max(1,b-a)}" height="${H-bot}" fill="${css('--accent')}" opacity=".08"/>`; }
+  cnt.forEach((c,i)=>{ let y=H-bot; for(const k of SECS){ if(!c[k]) continue; const h=Math.max(1,Math.sqrt(c[k]/max)*(H-bot-top)*(c[k]/c.t)); y-=h; s+=`<rect x="${i*bwpx+.5}" y="${y}" width="${Math.max(1,bwpx-1)}" height="${h}" fill="${secColor(k)}"><title>${fmtT(lo+i*bw)} · ${k}: ${fmtN(c[k])} events</title></rect>`; } });
+  if(S.C.pivot && S.C.pivot>=lo && S.C.pivot<=hi){ const px=(S.C.pivot-lo)/span*W; s+=`<line x1="${px}" x2="${px}" y1="0" y2="${H-bot}" stroke="${css('--hi')}" stroke-width="2"/><text x="${px+3}" y="10" class="ax" style="fill:${css('--hi')}">alert</text>`; }
+  s+=`<text x="0" y="${H-3}" class="ax">${fmtT(lo)}</text><text x="${W}" y="${H-3}" class="ax" text-anchor="end">${fmtT(hi)} (${TZ})</text>`;
+  s+=`<text x="${W/2}" y="${H-3}" class="ax" text-anchor="middle">drag to set a time range · height = √events</text>`;
+  s+=`<rect id="brush" x="0" y="0" width="0" height="${H-bot}" fill="${css('--accent')}" opacity=".25"/></svg>`;
+  el.innerHTML=s;
+  const svg=$('#hsvg'), br=$('#brush'); let x0=null;
+  const px=ev=>{ const b=svg.getBoundingClientRect(); return Math.max(0,Math.min(W,(ev.clientX-b.left)/b.width*W)); };
+  svg.onmousedown=ev=>{ x0=px(ev); br.setAttribute('x',x0); br.setAttribute('width',0); };
+  svg.onmousemove=ev=>{ if(x0==null) return; const x1=px(ev); br.setAttribute('x',Math.min(x0,x1)); br.setAttribute('width',Math.abs(x1-x0)); };
+  window.onmouseup=ev=>{ if(x0==null) return; const x1=px(ev), a=Math.min(x0,x1), b=Math.max(x0,x1); x0=null;
+    const ta=lo+a/W*span, tb=lo+(b<a+3?a+W/bins:b)/W*span; S.C.win=''; S.f.from=Math.floor(ta); S.f.to=Math.ceil(tb); syncInputs(); render(); };
+}
+
+// ================= grid view =================
+function vGrid(id,base){
+  const t=TABM[id], g=grid(id), R0=tabRows(id,base);
+  const tool=(extra='')=>`<div class="gbar">
+    <b style="color:var(--ink)">${fmtN(R0.length)}</b> rows · ${fmtN(R0.reduce((a,r)=>a+r.n,0))} events
+    <label>Group by <select id="g-group"><option value="">none</option>${colsFor(id).filter(c=>!['time','last','n','flags','tag'].includes(c)).map(c=>`<option value="${c}" ${g.group===c?'selected':''}>${esc(CD[c].h)}</option>`).join('')}</select></label>
+    <button class="sm" id="g-cols">Columns…</button>
+    <label>Rows/page <select id="g-size">${[100,250,500,1000,2500].map(n=>`<option ${g.size===n?'selected':''}>${n}</option>`).join('')}</select></label>
+    <button class="sm" id="g-csv" title="All rows in this view, visible columns">Export CSV</button>
+    <button class="sm" id="g-reset">Reset view</button>
+    ${Object.keys(g.cf).length?'<button class="sm" id="g-cfclear">Clear column filters</button>':''}
+    ${extra}
+    <span class="help" title="In the filter boxes under each header: text = contains · a|b = either · !text = exclude · =text = exact · = empty · * = not empty · /regex/ · >10 or <=443 on numbers">filter syntax ⓘ</span></div>`;
+  let extra='';
+  if(t.tree) extra=`<button class="sm" id="p-tree" ${S.pmode==='tree'?'disabled':''}>Tree</button><button class="sm" id="p-tab" ${S.pmode==='table'?'disabled':''}>Table</button>`;
+  if(id==='web') extra=`<label><input type="checkbox" id="w-br" ${S.webBr?'checked':''}> Browsers only</label>`;
+  let R=R0; if(id==='web'&&S.webBr) R=R.filter(r=>BROWSERS.has(lc(r.proc)));
+  if(t.tree&&S.pmode==='tree') return tool(extra)+vTree(R);
+  if(g.group) return tool(extra)+vGroups(id,R);
+  R=sortRows(R,g.sort);
+  const pages=Math.max(1,Math.ceil(R.length/g.size)); if(g.page>=pages) g.page=pages-1;
+  const view=R.slice(g.page*g.size,(g.page+1)*g.size);
+  let pivotIdx=-1; if(S.C.pivot&&g.sort.c==='time') pivotIdx=view.findIndex(r=>g.sort.d>0?r.t0>=S.C.pivot:r.t0<=S.C.pivot);
+  const pager=`<div class="pager">${pages>1?`page ${g.page+1} / ${pages} <button class="sm" data-pg="-1">‹ Prev</button><button class="sm" data-pg="1">Next ›</button>`:''}${S.C.pivot&&g.sort.c==='time'?' <button class="sm" id="t-jump">Jump to alert time</button>':''}</div>`;
+  const head='<tr>'+g.cols.map(c=>`<th class="${CD[c].num&&c!=='time'&&c!=='last'?'n':''}"><span class="sh" data-sort="${c}">${esc(CD[c].h)}${g.sort.c===c?`<span class="ar">${g.sort.d>0?'▲':'▼'}</span>`:''}</span></th>`).join('')+'</tr>'
+    +'<tr class="fr">'+g.cols.map(c=>`<th>${['flags','tag'].includes(c)&&false?'':`<input data-cf="${c}" value="${esc(g.cf[c]||'')}" class="${g.cf[c]?'on':''}" placeholder="filter">`}</th>`).join('')+'</tr>';
+  const cell=(c,r)=>{ const d=CD[c]; if(d.html) return d.html(r); const v=cellTxt(c,r); if(v==='') return ''; const s=esc(trunc(v,/wrap/.test(d.c||'')?400:200)); return d.nolink?s:`<a class="cv" data-c="${c}">${s}</a>`; };
+  const cls=c=>{ const d=CD[c]; return (d.c||'')+(d.num&&c!=='time'&&c!=='last'?' n':''); };
+  const body=view.map((r,i)=>`<tr data-i="${r.i}" class="${S.sel===r.i?'sel ':''}${i===pivotIdx?'pivot':''}">`+g.cols.map(c=>`<td class="${cls(c)}">${cell(c,r)}</td>`).join('')+'</tr>').join('');
+  return tool(extra)+pager+`<div class="tw"><table><thead>${head}</thead><tbody>${body||`<tr><td colspan="${g.cols.length}" class="muted">Nothing matches.</td></tr>`}</tbody></table></div>`+(pages>1?pager:'');
+}
+function vGroups(id,R){
+  const g=grid(id), c=g.group, M=new Map();
+  for(const r of R){ const v=cellTxt(c,r); let a=M.get(v); if(!a){ a={v,rows:0,n:0,t0:r.t0,t1:r.t1,procs:new Map(),users:new Map(),hosts:new Set()}; M.set(v,a); }
+    a.rows++; a.n+=r.n; if(r.t0<a.t0) a.t0=r.t0; if(r.t1>a.t1) a.t1=r.t1; if(r.proc) a.procs.set(r.proc,(a.procs.get(r.proc)||0)+r.n); if(r.who) a.users.set(r.wk,1); a.hosts.add(r.host); }
+  let G=[...M.values()]; const gs=g.gsort, key={v:a=>lc(a.v),rows:a=>a.rows,n:a=>a.n,t0:a=>a.t0,t1:a=>a.t1,users:a=>a.users.size}[gs.c]||(a=>a.rows);
+  G.sort((a,b)=>{ const x=key(a),y=key(b); return (x<y?-1:x>y?1:0)*gs.d; });
+  const size=g.size, pages=Math.max(1,Math.ceil(G.length/size)); if(g.page>=pages) g.page=pages-1; const view=G.slice(g.page*size,(g.page+1)*size);
+  const th=(k,l,n)=>`<th class="${n?'n':''}"><span class="sh" data-gsort="${k}">${l}${gs.c===k?`<span class="ar">${gs.d>0?'▲':'▼'}</span>`:''}</span></th>`;
+  const top=m=>[...m.entries()].sort((a,b)=>b[1]-a[1]).slice(0,3).map(x=>x[0]).join(', ')+(m.size>3?` +${m.size-3}`:'');
+  return `<div class="pager">${fmtN(G.length)} distinct ${esc(CD[c].h)} values ${pages>1?`· page ${g.page+1}/${pages} <button class="sm" data-pg="-1">‹</button><button class="sm" data-pg="1">›</button>`:''} · <b>+</b> keep only · <b>−</b> exclude · click a value to see its rows</div>
+  <div class="tw"><table><thead><tr><th></th>${th('v',esc(CD[c].h))}${th('rows','Rows',1)}${th('n','Events',1)}${th('t0','First')}${th('t1','Last')}${th('users','Users',1)}<th>Top processes</th><th>Hosts</th></tr></thead><tbody>
+  ${view.map(a=>`<tr data-gv="${esc(a.v)}"><td style="white-space:nowrap"><button class="sm" data-gin="1" title="Keep only this">+</button> <button class="sm" data-gout="1" title="Exclude this">−</button></td><td class="wrap ${/mono/.test(CD[c].c||'')?'mono':''}"><b>${a.v===''?'<span class="muted">(empty)</span>':esc(trunc(a.v,300))}</b></td><td class="n">${fmtN(a.rows)}</td><td class="n">${fmtN(a.n)}</td><td class="t">${fmtT(a.t0)}</td><td class="t">${fmtT(a.t1)}</td><td class="n">${a.users.size}</td><td>${esc(top(a.procs))}</td><td>${esc([...a.hosts].join(', '))}</td></tr>`).join('')||'<tr><td colspan="9" class="muted">Nothing matches.</td></tr>'}
+  </tbody></table></div>`;
+}
+
+// ---------- process tree ----------
+function vTree(P){
+  P=P.filter(isStart);
+  const keep=new Set(P.map(r=>r.ciid).filter(Boolean));
+  for(const r of P){ let p=S.byCiid.get(r.aiid), g=0; while(p&&g++<60){ keep.add(p.ciid); p=S.byCiid.get(p.aiid); } }
+  const nodes=[...keep].map(id=>S.byCiid.get(id)).filter(Boolean), inView=new Set(P.map(r=>r.ciid));
+  const roots=nodes.filter(r=>!keep.has(r.aiid));
+  const byParent=new Map(); nodes.forEach(r=>{ if(keep.has(r.aiid)){ if(!byParent.has(r.aiid)) byParent.set(r.aiid,[]); byParent.get(r.aiid).push(r); } });
+  const memo=new Map(); const mark=r=>{ if(memo.has(r.ciid)) return memo.get(r.ciid); memo.set(r.ciid,false); const v=r.f.length>0||!!S.C.tags[r.key]||(byParent.get(r.ciid)||[]).some(mark); memo.set(r.ciid,v); return v; };
+  const act=r=>{ const a=S.act.get(r.ciid); if(!a) return ''; return `<span class="act">${['network','file','registry','module'].filter(k=>a[k]).map(k=>`${k==='module'?'mod':k.slice(0,4)} ${fmtN(a[k])}`).join(' · ')}</span>`; };
+  let count=0; const LIMIT=5000;
+  const node=(r,depth)=>{ if(++count>LIMIT) return ''; const kids=(byParent.get(r.ciid)||[]).sort((a,b)=>a.t0-b.t0), hit=mark(r), open=hit||depth<2||P.length<300, ctx=!inView.has(r.ciid);
+    return `<details class="${kids.length?'':'leaf'} ${r.f.length||S.C.tags[r.key]?'hit':''}" ${open?'open':''} data-c="${esc(r.ciid)}" ${ctx?'style="opacity:.55"':''}><summary><span class="muted">${fmtT(r.t0).slice(5)}</span> <a class="pv pn" data-i="${r.i}">${esc(r.child||base(r.child_path))}</a>${r.child_pid?` <span class="muted">[${esc(r.child_pid)}]</span>`:''} ${tagCell(r)}${fcell(r)}<span class="pc">${esc(trunc(r.child_cmd,200))}</span> <span class="act">${esc(r.user)}</span>${act(r)}</summary>${open?kids.map(k=>node(k,depth+1)).join(''):''}</details>`; };
+  const grp={}; roots.sort((a,b)=>a.t0-b.t0).forEach(r=>{ (grp[r.proc||'?']??=[]).push(r); });
+  const html=Object.entries(grp).sort((a,b)=>a[1][0].t0-b[1][0].t0).map(([k,rs])=>`<details open><summary><b>${esc(k)}</b> <span class="muted">(parent start not in export) · ${rs.length} child process${rs.length>1?'es':''}</span></summary>${rs.map(r=>node(r,1)).join('')}</details>`).join('');
+  return `<div class="help" style="margin-bottom:6px">Parent → child by process instance. Column filters and global filters narrow the tree; ancestors stay visible (faded) for context. Flagged/tagged branches auto-expand.</div><div class="tree" id="ptree">${html||'<span class="muted">No process starts in view.</span>'}${count>LIMIT?`<div class="muted">Tree truncated at ${LIMIT} nodes. Narrow the filters or use Table.</div>`:''}</div>`;
+}
+function expandLazy(det){
+  if(det.dataset.done||det.querySelector(':scope > details')) return; det.dataset.done=1;
+  const kids=S.rows.filter(r=>isStart(r)&&r.aiid===det.dataset.c).sort((a,b)=>a.t0-b.t0);
+  det.insertAdjacentHTML('beforeend',kids.map(r=>`<details class="${S.kidsOf(r.ciid)?'':'leaf'} ${r.f.length?'hit':''}" data-c="${esc(r.ciid)}"><summary><span class="muted">${fmtT(r.t0).slice(5)}</span> <a class="pv pn" data-i="${r.i}">${esc(r.child)}</a> ${fcell(r)}<span class="pc">${esc(trunc(r.child_cmd,200))}</span> <span class="act">${esc(r.user)}</span></summary></details>`).join(''));
+}
+
+// ---------- overview ----------
+function vOverview(F){
+  const agg=(pred,kf)=>{ const m={}; for(const r of F){ if(!pred(r)) continue; const k=kf(r); if(k) m[k]=(m[k]||0)+r.n; } return m; };
+  const bars=(o,col,tab,lim=10)=>{ const e=Object.entries(o).sort((a,b)=>b[1]-a[1]).slice(0,lim), m=Math.max(1,...e.map(x=>x[1])); return `<div class="bars">${e.map(([n,c])=>`<div class="b" data-c="${col}" data-v="${esc(n)}" data-t="${tab}"><span class="l" title="${esc(n)}">${esc(n)}</span><span class="r">${fmtN(c)}</span><span class="fill" style="width:${Math.max(2,c/m*100)}%"></span></div>`).join('')||'<span class="muted">none</span>'}</div>`; };
+  const cnt=id=>F.filter(TABM[id].pred).length;
+  const fset=new Set(F.map(r=>r.i)), finds=RULES.map(x=>({x,n:S.hits[x.id].filter(r=>fset.has(r.i)).length})).filter(o=>o.n).sort((a,b)=>b.n-a.n);
+  return `<div class="stats">${['all','process','network','web','file','registry','module','logons','evtlog','persist'].map(id=>`<div class="stat" data-tab="${id}"><div class="v">${fmtN(cnt(id))}</div><div class="k">${TABM[id].l}</div></div>`).join('')}</div>
+  <div class="grid">
+    <div class="card"><h3>Case notes</h3><input type="text" id="c-title" placeholder="Case / alert title" value="${esc(S.C.title)}" style="width:100%;margin-bottom:6px"><textarea id="c-notes" placeholder="Alert details, scope, hypothesis, next steps…">${esc(S.C.notes)}</textarea><div class="help" style="margin-top:4px">Saved as you type · included in the report.</div></div>
+    <div class="card"><h3>Users (events)</h3>${bars(agg(r=>!!r.wk&&!/\$$/.test(r.wk),r=>r.wk),'user','all')}</div>
+    <div class="card"><h3>Most active processes (events)</h3>${bars(agg(r=>!!r.proc,r=>r.proc),'proc','all')}</div>
+    <div class="card"><h3>Processes launched</h3>${bars(agg(isStart,r=>r.child),'child','process')}</div>
+    <div class="card"><h3>External destinations</h3>${bars(agg(r=>r.sec==='network'&&r.ext,r=>r.domain||r.rip),'domain','network')}</div>
+    <div class="card"><h3>Remote ports</h3>${bars(agg(r=>r.sec==='network'&&!!r.rport,r=>String(r.rport)),'rport','network')}</div>
+    <div class="card"><h3>Logons (user · type)</h3>${bars(agg(r=>r.evid===4624,r=>`${r.ev_user||'?'} · ${LT(r.ev_logon_type)}`),'_logon','logons')}</div>
+    <div class="card"><h3>Event IDs</h3>${bars(agg(r=>r.sec==='evtlog',r=>`${r.evid} ${EVNAME[r.evid]||''}`.trim()),'_evid','evtlog')}</div>
+    <div class="card"><h3>File types touched</h3>${bars(agg(r=>r.sec==='file',r=>extOf(r.file)||'(none)'),'file_ext','file')}</div>
+    <div class="card"><h3>Non-Microsoft signers / unsigned</h3>${bars(agg(r=>(r.sec==='process'||r.sec==='module')&&!signedMs(r.child_signer||r.module_signer,r.child_sig||r.module_sig),r=>r.sec==='process'?signTxt(r.child_signer,r.child_sig):signTxt(r.module_signer,r.module_sig)),'_signer','process')}</div>
+    <div class="card"><h3>Hosts</h3>${bars(agg(()=>true,r=>r.host),'host','all')}</div>
+    <div class="card"><h3>Heuristic flags (optional lens)</h3>${finds.map(o=>`<div class="find" data-fl="${o.x.id}"><span class="sv ${o.x.sev}"></span><span>${esc(o.x.t)}</span><span class="c">${fmtN(o.n)}</span></div>`).join('')||'<span class="muted">none</span>'}</div>
+  </div>`;
+}
+
+// ================= drawer =================
+const DRAWER_COLS = ['host','sub','user','proc','pid','proc_path','proc_cmd','proc_signer','proc_sha','cgo','cgo_cmd','aiid','child','child_pid','child_path','child_cmd','child_signer','child_sha','ciid','rip','rport','scope','domain','file','file_prev','file_sha','reg_key','reg_value','reg_data','module','module_signer','module_sha','evid','evname','ev_user','ev_logon_type','ev_ip','ev_ws','ev_subject','ev_proc','ev_auth','ev_obj','ev_obj2','ev_msg'];
+function openDrawer(r){
+  S.sel=r.i; const t=S.C.tags[r.key]||{};
+  $('#dr-t').innerHTML=`<span class="sec ${r.sec}">${esc(r.sec==='evtlog'?(r.cat||'log'):r.sec)}</span> ${esc(fmtT(r.t0))}${r.n>1?` <span class="muted">×${fmtN(r.n)}</span>`:''}`;
+  let evj=''; if(r.ev_json){ try{ evj=JSON.stringify(JSON.parse(r.ev_json),null,2); }catch(e){ evj=r.ev_json; } }
+  $('#dr-b').innerHTML=`<div class="mono" style="margin-bottom:8px">${esc(summ(r))}</div>${r.f.length?`<div style="margin-bottom:8px">${r.f.map(id=>`<span class="fb ${RMAP[id].sev}">${esc(RMAP[id].t)}</span>`).join('')}</div>`:''}
+    <div class="row tb"><button class="mal ${t.tag==='mal'?'on':''}" data-tag="mal">Malicious</button><button class="sus ${t.tag==='sus'?'on':''}" data-tag="sus">Suspicious</button><button class="ben ${t.tag==='ben'?'on':''}" data-tag="ben">Benign</button><button data-tag="">Clear tag</button></div>
+    <h4>Analyst note</h4><textarea id="dr-note" placeholder="What is this and why does it matter?">${esc(t.note||'')}</textarea>
+    <h4>Pivot</h4><div class="row">${r.aiid?'<button class="sm" data-pk="aiid" data-pv="'+esc(r.aiid)+'">Everything this process instance did</button>':''}${r.ciid?'<button class="sm" data-pk="aiid" data-pv="'+esc(r.ciid)+'">Everything the child did</button>':''}<button class="sm" id="dr-ctx">±5 min around this</button><button class="sm" id="dr-piv">Set as alert time</button>${isStart(r)||r.aiid?'<button class="sm" id="dr-tree">Show in process tree</button>':''}</div>
+    <h4>Fields <span class="help" style="text-transform:none;letter-spacing:0">+ keep only · − exclude</span></h4>
+    <dl class="kv">${[['Time',fmtT(r.t0)+(r.n>1?` → ${fmtT(r.t1)}`:'')+' '+TZ,null],...DRAWER_COLS.map(c=>[CD[c].h,cellTxt(c,r),c])].filter(x=>x[1]!==''&&x[1]!=null).map(([k,v,c])=>`<dt>${esc(k)}</dt><dd class="${c&&/mono/.test(CD[c].c||'')?'mono':''}">${esc(v)}${c?` <button class="sm" data-inc="${c}">+</button><button class="sm" data-exc="${c}">−</button>`:''}</dd>`).join('')}</dl>
+    ${evj?`<h4>Raw event data</h4><pre class="json">${esc(evj)}</pre>`:''}`;
+  $('#drawer').classList.add('open');
+  const b=$('#dr-b');
+  const setTag=(tag,note)=>{ const cur={...(S.C.tags[r.key]||{})}; if(tag!==undefined){ if(tag) cur.tag=tag; else delete cur.tag; } if(note!==undefined) cur.note=note; if(cur.tag||(cur.note&&cur.note.trim())){ cur.t=r.t0; cur.s=summ(r).slice(0,300); cur.host=r.host; S.C.tags[r.key]=cur; } else delete S.C.tags[r.key]; saveCase(); };
+  b.querySelectorAll('[data-tag]').forEach(x=>x.onclick=()=>{ setTag(x.dataset.tag); openDrawer(r); renderBody(); });
+  $('#dr-note').oninput=()=>setTag(undefined,$('#dr-note').value);
+  $('#dr-note').onblur=()=>renderBody();
+  b.querySelectorAll('[data-pk]').forEach(x=>x.onclick=()=>{ addChip(x.dataset.pk,x.dataset.pv); if(S.tab==='overview'||S.tab==='tagged') setTab('all'); });
+  b.querySelectorAll('[data-inc],[data-exc]').forEach(x=>x.onclick=()=>{ const c=x.dataset.inc||x.dataset.exc; addChip(c,cellTxt(c,r),!!x.dataset.exc); if(S.tab==='overview'||S.tab==='tagged') setTab('all'); });
+  $('#dr-ctx').onclick=()=>{ S.C.win=''; S.f.from=r.t0-300000; S.f.to=(r.t1??r.t0)+300000; S.f.chips=S.f.chips.filter(c=>c.c==='host'); Object.values(S.G).forEach(g=>{ g.cf={}; g.group=''; }); syncInputs(); setTab('all'); };
+  $('#dr-piv').onclick=()=>{ S.C.pivot=r.t0; saveCase(); syncInputs(); render(); };
+  if($('#dr-tree')) $('#dr-tree').onclick=()=>{ const id=isStart(r)?r.ciid:r.aiid; closeDrawer(); S.pmode='tree'; setTab('process'); setTimeout(()=>{ const el=document.querySelector(`#ptree details[data-c="${CSS.escape(id)}"]`); if(el){ let p=el; while(p){ if(p.tagName==='DETAILS') p.open=true; p=p.parentElement; } el.scrollIntoView({block:'center'}); el.querySelector('summary').style.outline='2px solid '+css('--accent'); } else alertMsg('That process start is not in the current view'); },60); };
+  document.querySelectorAll('tr.sel').forEach(x=>x.classList.remove('sel')); document.querySelectorAll(`tr[data-i="${r.i}"]`).forEach(x=>x.classList.add('sel'));
+}
+function closeDrawer(){ $('#drawer').classList.remove('open'); S.sel=null; document.querySelectorAll('tr.sel').forEach(x=>x.classList.remove('sel')); }
+
+// ================= popovers =================
+function hidePops(){ $('#pop').classList.add('hidden'); $('#colpick').classList.add('hidden'); }
+function showPop(ev,c,r){
+  const v=cellTxt(c,r), p=$('#pop');
+  p.innerHTML=`<div class="pv0"><b>${esc(CD[c].h)}</b>: ${esc(trunc(v,200))}</div>
+    <button data-a="in">Keep only this value</button><button data-a="out">Exclude this value</button>
+    <button data-a="cf">Filter this column: contains…</button><button data-a="grp">Group by ${esc(CD[c].h)}</button>
+    <button data-a="row">Open event details</button><button data-a="copy">Copy value</button>`;
+  p.classList.remove('hidden'); const W=p.offsetWidth, H=p.offsetHeight;
+  p.style.left=Math.min(ev.clientX,innerWidth-W-8)+'px'; p.style.top=Math.min(ev.clientY+8,innerHeight-H-8)+'px';
+  p.onclick=e=>{ const a=e.target.dataset.a; if(!a) return; hidePops(); const g=grid(S.tab);
+    if(a==='in') addChip(c,v); else if(a==='out') addChip(c,v,true);
+    else if(a==='cf'){ g.cf[c]=v.length>80?v.slice(0,80):v; g.page=0; renderBody(); }
+    else if(a==='grp'){ g.group=c; g.page=0; renderBody(); }
+    else if(a==='row') openDrawer(r);
+    else if(a==='copy') navigator.clipboard?.writeText(v).then(()=>alertMsg('Copied'),()=>alertMsg('Copy blocked by browser')); };
+}
+function showCols(btn){
+  const g=grid(S.tab), cp=$('#colpick'), all=colsFor(S.tab);
+  cp.innerHTML=all.map(c=>`<label><input type="checkbox" data-col="${c}" ${g.cols.includes(c)?'checked':''}> ${esc(CD[c].h)}</label>`).join('');
+  cp.classList.remove('hidden'); const b=btn.getBoundingClientRect();
+  cp.style.left=Math.min(b.left,innerWidth-cp.offsetWidth-8)+'px'; cp.style.top=(b.bottom+4)+'px';
+  cp.onchange=e=>{ const c=e.target.dataset.col; if(!c) return; if(e.target.checked){ if(!g.cols.includes(c)) g.cols=[...g.cols,c]; } else g.cols=g.cols.filter(x=>x!==c); saveGrid(S.tab); renderBody(); showCols($('#g-cols')); };
+}
+
+// ================= report / csv =================
+function report(){
+  const R=S.rows.filter(r=>S.C.tags[r.key]).sort((a,b)=>a.t0-b.t0), L={mal:'MALICIOUS',sus:'SUSPICIOUS',ben:'BENIGN'};
+  let md=`# ${S.C.title||'IR case'}\n\n- Hosts: ${S.hosts.join(', ')}\n- Data window: ${fmtT(S.tmin)} to ${fmtT(S.tmax)} (${TZ})\n`+(S.C.pivot?`- Alert time: ${fmtT(S.C.pivot)} (${TZ})\n`:'')+`- Export: ${S.src}\n- Generated: ${fmtT(Date.now())} (${TZ})\n\n`;
+  if(S.C.notes.trim()) md+=`## Notes\n\n${S.C.notes.trim()}\n\n`;
+  const cell=s=>String(s||'').replace(/\|/g,'\\|').replace(/\r?\n/g,' ');
+  md+=`## Tagged activity (${R.length})\n\n| Time | Tag | Type | User | Activity | Note |\n|---|---|---|---|---|---|\n`;
+  R.forEach(r=>{ const t=S.C.tags[r.key]; md+=`| ${fmtT(r.t0)} | ${L[t.tag]||''} | ${r.sec==='evtlog'?r.cat:r.sec} | ${cell(r.who)} | \`${cell(trunc(summ(r),300))}\` | ${cell(t.note)} |\n`; });
+  const io={ip:new Set(),domain:new Set(),sha256:new Set(),path:new Set()};
+  R.filter(r=>['mal','sus'].includes(S.C.tags[r.key].tag)).forEach(r=>{ if(r.ext) io.ip.add(r.rip); if(r.domain) io.domain.add(r.domain); [r.child_sha256,r.file_sha256,r.module_sha256].filter(Boolean).forEach(h=>io.sha256.add(h)); [r.file,r.module,isStart(r)?r.child_path:''].filter(Boolean).forEach(p=>io.path.add(p)); });
+  md+=`\n## Indicators (from malicious/suspicious tags)\n\n`; for(const [k,v] of Object.entries(io)) if(v.size) md+=`**${k}**\n\n${[...v].map(x=>'- `'+x+'`').join('\n')}\n\n`;
+  download(`ir-report-${S.hosts.join('_')}-${new Date().toISOString().slice(0,10)}.md`,md,'text/markdown');
+}
+function toCSV(R,cols){ const q=v=>{ v=String(v??''); return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
+  return cols.map(c=>q(CD[c].h)).join(',')+'\n'+R.map(r=>cols.map(c=>q(cellTxt(c,r))).join(',')).join('\n'); }
+
+// ================= render =================
+let BASE=[];
+function setTab(t){ S.tab=t; if(S.G[t]) S.G[t].page=0; hidePops(); render(); window.scrollTo(0,0); }
+function render(){ BASE=globalFiltered(); drawHist(BASE); renderTabs(); renderChips(); renderBody(); }
+function renderTabs(){ $('#tabs').innerHTML=TABS.map(t=>`<button data-tab="${t.id}" class="${S.tab===t.id?'on':''}">${t.l}${t.pred?`<span class="ct">${fmtN((t.all?S.rows:BASE).filter(t.pred).length)}</span>`:''}</button>`).join(''); }
+function renderChips(){
+  const c=S.f.chips.map((x,i)=>`<span class="chip ${x.neg?'neg':''}"><b>${esc(CHIPN(x.c))}${x.neg?' ≠':''}</b> ${esc(trunc(x.v,48))}<button data-x="${i}" title="Remove">×</button><button data-flip="${i}" title="Flip include/exclude">⇄</button></span>`);
+  if(S.C.pivot&&+S.C.win) c.push(`<span class="chip"><b>window</b> alert ±${S.C.win>=60?S.C.win/60+'h':S.C.win+'m'}<button data-x="win">×</button></span>`);
+  $('#chips').innerHTML=c.join('');
+}
+function renderBody(){
+  const ae=document.activeElement, keep=ae&&ae.dataset&&ae.dataset.cf?{c:ae.dataset.cf,s:ae.selectionStart}:null;
+  $('#main').innerHTML = S.tab==='overview' ? vOverview(BASE) : vGrid(S.tab,BASE);
+  wireBody();
+  if(keep){ const el=document.querySelector(`input[data-cf="${keep.c}"]`); if(el){ el.focus(); try{ el.setSelectionRange(keep.s,keep.s); }catch(e){} } }
+}
+let cfTimer;
+function wireBody(){
+  const m=$('#main'), g=S.tab!=='overview'?grid(S.tab):null;
+  m.querySelectorAll('tbody tr[data-i]').forEach(tr=>tr.onclick=ev=>{ if(ev.target.closest('a,button,input')) return; openDrawer(S.rows[+tr.dataset.i]); });
+  m.querySelectorAll('a.cv').forEach(a=>a.onclick=ev=>{ ev.stopPropagation(); ev.preventDefault(); showPop(ev,a.dataset.c,S.rows[+a.closest('tr').dataset.i]); });
+  m.querySelectorAll('a.pv[data-i]').forEach(a=>a.onclick=ev=>{ ev.stopPropagation(); ev.preventDefault(); openDrawer(S.rows[+a.dataset.i]); });
+  m.querySelectorAll('[data-pg]').forEach(b=>b.onclick=()=>{ g.page=Math.max(0,g.page+ +b.dataset.pg); renderBody(); window.scrollTo(0,0); });
+  m.querySelectorAll('[data-sort]').forEach(x=>x.onclick=()=>{ const c=x.dataset.sort; g.sort = g.sort.c===c ? {c,d:-g.sort.d} : {c,d:(c==='time'||!CD[c].num)?1:-1}; g.page=0; saveGrid(S.tab); renderBody(); });
+  m.querySelectorAll('[data-gsort]').forEach(x=>x.onclick=()=>{ const c=x.dataset.gsort; g.gsort = g.gsort.c===c ? {c,d:-g.gsort.d} : {c,d:c==='v'||c==='t0'?1:-1}; renderBody(); });
+  m.querySelectorAll('input[data-cf]').forEach(inp=>{ inp.oninput=()=>{ clearTimeout(cfTimer); cfTimer=setTimeout(()=>{ const v=inp.value; if(v.trim()) g.cf[inp.dataset.cf]=v; else delete g.cf[inp.dataset.cf]; g.page=0; renderBody(); },250); }; });
+  m.querySelectorAll('tr[data-gv]').forEach(tr=>{ const v=tr.dataset.gv;
+    tr.querySelector('[data-gin]').onclick=ev=>{ ev.stopPropagation(); addChip(g.group,v); };
+    tr.querySelector('[data-gout]').onclick=ev=>{ ev.stopPropagation(); addChip(g.group,v,true); };
+    tr.onclick=ev=>{ if(ev.target.closest('button')) return; const c=g.group; g.group=''; addChip(c,v); }; });
+  if($('#g-group')) $('#g-group').onchange=()=>{ g.group=$('#g-group').value; g.page=0; renderBody(); };
+  if($('#g-size')) $('#g-size').onchange=()=>{ g.size=+$('#g-size').value; g.page=0; saveGrid(S.tab); renderBody(); };
+  if($('#g-cols')) $('#g-cols').onclick=ev=>{ ev.stopPropagation(); showCols(ev.currentTarget); };
+  if($('#g-reset')) $('#g-reset').onclick=()=>{ const t=TABM[S.tab]; Object.assign(g,{cols:[...t.cols],sort:{c:'time',d:1},cf:{},group:t.group||'',page:0,size:250}); saveGrid(S.tab); renderBody(); };
+  if($('#g-cfclear')) $('#g-cfclear').onclick=()=>{ g.cf={}; g.page=0; renderBody(); };
+  if($('#g-csv')) $('#g-csv').onclick=()=>{ let R=tabRows(S.tab,BASE); if(S.tab==='web'&&S.webBr) R=R.filter(r=>BROWSERS.has(lc(r.proc))); R=sortRows(R,g.sort); download(`ir-${S.tab}-${S.hosts.join('_')}.csv`,toCSV(R,g.cols.length?g.cols:TABM[S.tab].cols),'text/csv'); };
+  if($('#t-jump')) $('#t-jump').onclick=()=>{ let R=sortRows(tabRows(S.tab,BASE),g.sort); const idx=R.findIndex(r=>g.sort.d>0?r.t0>=S.C.pivot:r.t0<=S.C.pivot); if(idx>=0){ g.page=Math.floor(idx/g.size); renderBody(); setTimeout(()=>{ const el=document.querySelector('tr.pivot'); if(el) el.scrollIntoView({block:'center'}); },30); } };
+  if($('#p-tree')) $('#p-tree').onclick=()=>{ S.pmode='tree'; renderBody(); };
+  if($('#p-tab')) $('#p-tab').onclick=()=>{ S.pmode='table'; g.page=0; renderBody(); };
+  if($('#w-br')) $('#w-br').onchange=()=>{ S.webBr=$('#w-br').checked; g.page=0; renderBody(); };
+  m.querySelectorAll('#ptree details').forEach(d=>d.addEventListener('toggle',()=>{ if(d.open) expandLazy(d); }));
+  m.querySelectorAll('.stat[data-tab]').forEach(x=>x.onclick=()=>setTab(x.dataset.tab));
+  m.querySelectorAll('.find[data-fl]').forEach(x=>x.onclick=()=>{ const t='all'; grid(t).cf.flags=x.dataset.fl; setTab(t); });
+  m.querySelectorAll('.bars .b').forEach(x=>x.onclick=()=>{ const c=x.dataset.c, v=x.dataset.v, t=x.dataset.t;
+    if(c==='_logon'){ grid('logons').cf.ev_user=v.split(' · ')[0]; setTab('logons'); return; }
+    if(c==='_evid'){ grid('evtlog').cf.evid='='+v.split(' ')[0]; setTab('evtlog'); return; }
+    if(c==='_signer'){ grid('process').cf.child_signer='='+v; S.pmode='table'; setTab('process'); return; }
+    if(c==='domain'){ const isIp=/^[\d.:a-f]+$/i.test(v)&&!/[g-z]/i.test(v); S.tab=t; addChip(isIp?'rip':'domain',v); return; }
+    if(c==='file_ext'){ grid('file').cf.file_ext=v==='(none)'?'=':'='+v; setTab('file'); return; }
+    if(c==='user'){ S.f.user=v; syncInputs(); S.tab=t; render(); return; }
+    if(c==='host'){ S.f.host=v; syncInputs(); S.tab=t; render(); return; }
+    S.tab=t; if(t==='process') S.pmode='table'; addChip(c,v); });
+  if($('#c-notes')){ $('#c-notes').oninput=()=>{ S.C.notes=$('#c-notes').value; saveCase(); }; $('#c-title').oninput=()=>{ S.C.title=$('#c-title').value; saveCase(); document.title='IR · '+(S.C.title||S.hosts.join(', ')); }; }
+  if(S.tab==='tagged'){ const gb=m.querySelector('.gbar'); gb.insertAdjacentHTML('beforeend','<button class="sm" id="t-rep">Export report (.md)</button><button class="sm" id="t-imp">Import case .json</button><input type="file" id="t-impf" accept=".json" hidden>');
+    $('#t-rep').onclick=report; $('#t-imp').onclick=()=>$('#t-impf').click();
+    $('#t-impf').onchange=()=>{ const f=$('#t-impf').files[0]; if(f) f.text().then(t=>{ try{ S.C=mergeCase(JSON.parse(t)); saveCase(); syncInputs(); render(); }catch(e){ alertMsg('Bad case file: '+e.message); } }); }; }
+}
+
+// ================= controls =================
+function syncInputs(){ $('#f-from').value=toLocalInput(S.f.from); $('#f-to').value=toLocalInput(S.f.to); $('#f-pivot').value=toLocalInput(S.C.pivot); $('#f-win').value=S.C.win||''; $('#f-user').value=S.f.user; $('#f-host').value=S.f.host; $('#f-noms').checked=S.f.noms; $('#f-flagged').checked=S.f.flagged; $('#f-tagged').checked=S.f.tagged; }
+function wireControls(){
+  $('#q').onkeydown=ev=>{ if(ev.key==='Enter'){ S.f.q=$('#q').value; render(); } };
+  $('#q').oninput=()=>{ if(!$('#q').value&&S.f.q){ S.f.q=''; render(); } };
+  $('#f-host').onchange=()=>{ S.f.host=$('#f-host').value; render(); };
+  $('#f-user').onchange=()=>{ S.f.user=$('#f-user').value; render(); };
+  $('#f-from').onchange=()=>{ S.f.from=fromLocalInput($('#f-from').value); S.C.win=''; $('#f-win').value=''; render(); };
+  $('#f-to').onchange=()=>{ S.f.to=fromLocalInput($('#f-to').value); S.C.win=''; $('#f-win').value=''; render(); };
+  $('#f-pivot').onchange=()=>{ S.C.pivot=fromLocalInput($('#f-pivot').value); saveCase(); render(); };
+  $('#f-win').onchange=()=>{ S.C.win=$('#f-win').value; if(S.C.win&&!S.C.pivot){ alertMsg('Set the alert time first'); S.C.win=''; $('#f-win').value=''; return; } saveCase(); render(); };
+  $('#f-noms').onchange=()=>{ S.f.noms=$('#f-noms').checked; render(); };
+  $('#f-flagged').onchange=()=>{ S.f.flagged=$('#f-flagged').checked; render(); };
+  $('#f-tagged').onchange=()=>{ S.f.tagged=$('#f-tagged').checked; render(); };
+  $('#f-clear').onclick=()=>{ S.f={q:'',host:'',user:'',from:null,to:null,chips:[],noms:false,flagged:false,tagged:false}; S.C.win=''; $('#q').value=''; Object.values(S.G).forEach(g=>{ g.cf={}; g.page=0; }); syncInputs(); render(); };
+  $('#chips').onclick=ev=>{ const x=ev.target.dataset.x, fl=ev.target.dataset.flip; if(fl!=null){ const c=S.f.chips[+fl]; c.neg=!c.neg; render(); return; } if(x==null) return; if(x==='win'){ S.C.win=''; saveCase(); } else S.f.chips.splice(+x,1); syncInputs(); render(); };
+  $('#tabs').onclick=ev=>{ const b=ev.target.closest('button[data-tab]'); if(b) setTab(b.dataset.tab); };
+  $('#dr-x').onclick=closeDrawer;
+  document.addEventListener('keydown',ev=>{ if(ev.key==='Escape'){ closeDrawer(); hidePops(); } });
+  document.addEventListener('click',ev=>{ if(!ev.target.closest('#pop,#colpick,#g-cols,a.cv')) hidePops(); });
+  $('#b-report').onclick=report;
+  $('#b-case').onclick=()=>{ download(`ir-case-${S.hosts.join('_')}.json`,JSON.stringify(S.C,null,2),'application/json'); dirty=false; caseStatus(); };
+  window.addEventListener('resize',()=>{ clearTimeout(window.__rz); window.__rz=setTimeout(()=>drawHist(BASE),150); });
+}
+
+// ================= load =================
+function start(rows,src,caseFromFile){
+  rows.sort((a,b)=>(a.t0??0)-(b.t0??0)); rows.forEach((r,i)=>{ r.i=i; r.key=rowKey(r); });
+  S.rows=rows; S.src=src;
+  S.hosts=[...new Set(rows.map(r=>r.host).filter(Boolean))].sort();
+  const uc={}; rows.forEach(r=>{ const u=r.wk; if(u&&!/\$$/.test(u)&&!/^(system|local service|network service|anonymous logon|dwm-\d+|umfd-\d+)$/.test(u)) uc[u]=(uc[u]||0)+r.n; });
+  S.users=Object.entries(uc).sort((a,b)=>b[1]-a[1]).map(x=>x[0]);
+  let lo=Infinity, hi=-Infinity; for(const r of rows){ if(r.t0!=null&&r.t0<lo) lo=r.t0; const e=r.t1??r.t0; if(e!=null&&e>hi) hi=e; } S.tmin=lo; S.tmax=hi;
+  S.hits=runFindings(rows);
+  S.byCiid=new Map(); rows.forEach(r=>{ if(isStart(r)&&r.ciid&&!S.byCiid.has(r.ciid)) S.byCiid.set(r.ciid,r); });
+  const kc=new Map(); rows.forEach(r=>{ if(isStart(r)&&r.aiid) kc.set(r.aiid,(kc.get(r.aiid)||0)+1); }); S.kidsOf=id=>kc.get(id)||0;
+  S.act=new Map(); rows.forEach(r=>{ if(r.sec!=='process'&&r.sec!=='evtlog'&&r.aiid){ if(!S.act.has(r.aiid)) S.act.set(r.aiid,{}); const a=S.act.get(r.aiid); a[r.sec]=(a[r.sec]||0)+r.n; } });
+  S.caseKey='ir-case:'+S.hosts.join(',')+':'+Math.floor(S.tmin/3600000);
+  S.C=mergeCase(caseFromFile||LS.get(S.caseKey,null)||{});
+  if(caseFromFile){ saveCase(); dirty=false; }
+  $('#f-host').innerHTML='<option value="">all</option>'+S.hosts.map(h=>`<option>${esc(h)}</option>`).join('');
+  $('#f-user').innerHTML='<option value="">all</option>'+S.users.map(u=>`<option value="${esc(u)}">${esc(u)}</option>`).join('');
+  ['#bar','#hist','#tabs','#b-report','#b-case','#b-load'].forEach(s=>$(s).classList.remove('hidden'));
+  $('#ttl').textContent='IR Workbench · '+S.hosts.join(', ');
+  $('#meta').textContent=`${fmtN(rows.length)} rows · ${fmtN(rows.reduce((a,r)=>a+r.n,0))} events · ${fmtT(S.tmin)} → ${fmtT(S.tmax)} ${TZ} · ${src}`;
+  document.title='IR · '+(S.C.title||S.hosts.join(', '));
+  wireControls(); syncInputs(); caseStatus(); render();
+  const stick=()=>{ $('#bar').style.top=document.querySelector('header').offsetHeight+'px'; }; stick(); window.addEventListener('resize',stick);
+}
+function go(files){
+  const msg=$('#dropmsg'); files=[...files]; msg.textContent='Reading '+files.map(f=>f.name).join(', ')+'…';
+  Promise.all(files.map(f=>f.text().then(t=>({f,t})))).then(list=>{
+    let caseObj=null; const data=[];
+    for(const {f,t} of list){ if(/\.json$/i.test(f.name)||/^\s*\{/.test(t)){ try{ caseObj=JSON.parse(t); }catch(e){ msg.textContent='Could not parse '+f.name; return; } } else data.push({f,t}); }
+    if(!data.length){ msg.textContent='Add the CSV/TSV export too. A case file alone has nothing to show.'; return; }
+    setTimeout(()=>{ let rows=[]; try{ for(const {t} of data){ const part=toRows(parseDelim(t)); for(const r of part) rows.push(r); } }catch(e){ msg.textContent=e.message; return; }
+      if(!rows.length){ msg.textContent='No rows found.'; return; }
+      $('#drop').remove(); start(rows,data.map(d=>d.f.name).join(', '),caseObj); },20);
+    msg.textContent='Parsing…';
+  });
+}
+const dz=$('#drop'), fi=$('#file');
+fi.onchange=()=>fi.files.length&&go(fi.files);
+['dragenter','dragover'].forEach(e=>dz.addEventListener(e,ev=>{ev.preventDefault();dz.classList.add('over');}));
+['dragleave','drop'].forEach(e=>dz.addEventListener(e,ev=>{ev.preventDefault();dz.classList.remove('over');}));
+dz.addEventListener('drop',ev=>{ if(ev.dataTransfer.files.length) go(ev.dataTransfer.files); });
+$('#b-theme').onclick=()=>{ const r=document.documentElement, dark=r.dataset.theme?r.dataset.theme==='dark':matchMedia('(prefers-color-scheme: dark)').matches; r.dataset.theme=dark?'light':'dark'; if(S.rows.length) drawHist(BASE); };
+window.__S=S;
+
+})();
+</script>
+</body>
+</html>
