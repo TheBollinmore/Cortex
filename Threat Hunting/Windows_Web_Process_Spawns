@@ -1,0 +1,10 @@
+config timeframe = 30d
+| dataset = xdr_data
+| filter event_type = ENUM.PROCESS and event_sub_type = ENUM.PROCESS_START and agent_os_type = ENUM.AGENT_OS_WINDOWS
+| alter proc = lowercase(action_process_image_name), parent = lowercase(actor_process_image_name), gparent = lowercase(causality_actor_process_image_name), cmd = lowercase(action_process_image_command_line)
+| filter gparent in ("w3wp.exe","httpd.exe","nginx.exe","php-cgi.exe","php-fpm.exe","tomcat.exe","tomcat9.exe","java.exe") or parent in ("w3wp.exe","httpd.exe","nginx.exe","php-cgi.exe","php-fpm.exe")
+| comp count() as n, count_distinct(agent_hostname) as hosts by gparent, parent, proc
+| sort asc n
+| limit 40
+| alter row = concat(to_string(n), "|", to_string(hosts), "|", coalesce(gparent,"?"), " -> ", coalesce(parent,"?"), " -> ", proc)
+| fields row
