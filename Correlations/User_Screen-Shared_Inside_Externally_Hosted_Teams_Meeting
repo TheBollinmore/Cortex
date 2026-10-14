@@ -1,0 +1,16 @@
+dataset = saas_audit_logs
+| filter service_type = "MicrosoftTeams"
+| alter op = json_extract_scalar(raw_log, "$.Operation")
+| filter op = "MeetingParticipantDetail"
+| alter attendees = json_extract_array(raw_log, "$.Attendees"),
+        artifact = json_extract_scalar(raw_log, "$.ArtifactsShared[0].ArtifactSharedName"),
+        share_start = json_extract_scalar(raw_log, "$.ArtifactsShared[0].ArtifactShareSessions[0].StartTimestamp"),
+        organizer = lowercase(json_extract_scalar(raw_log, "$.UserId")),
+        call_id = json_extract_scalar(raw_log, "$.CallId")
+| arrayexpand attendees
+| alter rtype = json_extract_scalar(attendees, "$.RecipientType"),
+        upn = lowercase(json_extract_scalar(attendees, "$.UPN")),
+        oid = json_extract_scalar(attendees, "$.UserObjectId")
+| filter artifact = "screenShared" and rtype = "GuestFederated" and upn contains "@" // Fill in your Org Domain
+| alter organizer_domain = arrayindex(regextract(organizer, "@(.+)$"), 0)
+| fields _time, upn, oid, organizer, organizer_domain, call_id, share_start
