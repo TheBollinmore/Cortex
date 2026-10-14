@@ -1,0 +1,95 @@
+Suricata Workbench: Corelight / Suricata alert investigation tool
+
+The Suricata Workbench investigates Suricata alerts from Corelight sensors. You start from the alert’s Zeek uid, and it rebuilds the full network session behind that alert along with everything else those two endpoints did around the same time. It’s two parts: an XQL query that exports the relevant records from corelight_zeek_raw, and a single, self-contained HTML page that loads the export so you can sort, filter, pivot and document it. The page runs entirely offline in the browser. The export is parsed locally and nothing is uploaded or sent anywhere.
+
+How it works:
+
+Open the query in XSIAM and set the $uid query parameter to the uid from the Suricata alert record.
+Set the context window, for example the alert time ±2 hours, by editing the between line or using the time picker.
+Run the query and export the results as CSV or TSV.
+Open the workbench page in a browser and drop the export onto it.
+
+What the query collects:
+
+The alert session: every Corelight record that shares the alert’s uid, across conn, http, ssl, files, suricata, notice, weird, smb and other logs. These are tagged session.
+Context: every other record in the window where either endpoint of that session appears on either side of a connection. These are tagged context.
+Logs covered: conn, dns, http, ssl, files, notice, weird, suricata_corelight, kerberos, ntlm, ssh, rdp, smb_files, smb_mapping, dce_rpc, dhcp, smtp and ftp.
+PCAP link: the Smart PCAP URL from the session’s conn record is included.
+Width: the output is kept to 52 columns to stay under XSIAM’s export column limit. Protocol-specific fields are packed into four generic columns (x1–x4), and the page unpacks them by log type.
+
+What the page provides:
+
+Opens on the Alert session tab: every record for the queried uid in time order, typically the conn summary, the TLS or HTTP record, any transferred files, and the Suricata alert itself. The alert time is set automatically, and session rows are highlighted in every tab.
+Tabs: Overview, Alert session, All records, Alerts & notices, Sessions (grouped by uid), Connections, DNS, HTTP, TLS, Files, Auth (Kerberos/NTLM/SSH/RDP), SMB/RPC, Other, Tagged.
+Session view: clicking any record shows every other record with the same uid in one panel.
+Grid on every tab: sort by any column; filter per column, including byte and duration units (>10mb, >5m) and connection states (=S0); group by any column; choose which columns to show; export the current view to CSV.
+Pivots: an IP on either side; this conversation in both directions; the same name (SNI, HTTP host or DNS query); the same JA3, file hash, SID or Community ID; ±5 minutes around any record.
+PCAP: a download link on every record in the session, opened straight from the sensor with your existing access.
+Time controls: an activity histogram with alert markers and a drag-to-select range, from/to times, and an alert-time window.
+Optional triage flags: for example, certificate didn’t validate, TLS without SNI, HTTP to a bare IP, executable transfers, large uploads to external hosts, long external connections, NXDOMAIN. These are a triage aid and off by default.
+Import check: reports missing columns or misaligned rows in the export, so a bad export is obvious instead of silently showing blank fields.
+Case work: tag records as Malicious, Suspicious or Benign, add notes, and keep case notes. These save automatically per uid in the browser and can be exported as JSON and reloaded.
+Report: a one-click Markdown report with the case notes, the full alert-session timeline, the signatures seen, the tagged records, the PCAP links, and indicators (IPs, names, URLs, JA3s, hashes).
+
+Limits:
+
+Context size: the query joins against every record in the context window. Busy endpoints such as DNS servers, DCs or proxies make the context large, so keep the window tight and use the page’s IP filter or the “Alert sessions only” checkbox.
+Visibility: shows hostnames and URIs from HTTP, but only SNI for TLS. Encrypted content isn’t visible without the PCAP.
+Asymmetric capture: if the sensor sees only one direction of a flow, byte counts and connection states can be misleading. The PCAP shows whether both directions were captured.
+Size: the page comfortably handles a few hundred thousand records. The query stops at 500,000 rows.
+
+Query:
+config timeframe between "2026-10-09 00:00:00 -0400" and "2026-10-09 20:00:00 -0400"
+| dataset = corelight_zeek_raw
+| filter _path in ("conn", "dns", "http", "ssl", "files", "notice", "weird", "suricata_corelight",
+                   "kerberos", "ntlm", "ssh", "rdp", "smb_files", "smb_mapping", "dce_rpc", "dhcp", "smtp", "ftp")
+// one row per endpoint, then keep rows whose endpoint was in the alert session
+| alter peer = arraycreate(id_orig_h, id_resp_h)
+| arrayexpand peer
+| join type = inner (
+    dataset = corelight_zeek_raw
+    | filter uid = $uid
+    | alter ip = arraycreate(id_orig_h, id_resp_h)
+    | arrayexpand ip
+    | filter ip != null
+    | comp count() as seen by ip
+    | fields ip
+  ) as a a.ip = peer
+| alter ctx = if(uid = $uid, "session", "context")
+// files records on older Zeek carry no IPs, so add the session's files by uid
+| union (
+    dataset = corelight_zeek_raw
+    | filter _path = "files" and uid = $uid
+    | alter ctx = "session"
+  )
+| alter ts = to_epoch(_time, "millis"),
+        path = _path,
+        src = id_orig_h, sport = id_orig_p, dst = id_resp_h, dport = id_resp_p,
+        sig = alert_signature, sid = alert_signature_id, sig_cat = alert_category, sig_sev = alert_severity,
+        svc = if(_path = "conn", to_string(service), null),
+        dur = duration, ob = orig_bytes, rb = resp_bytes, state = conn_state, hist = history,
+        pcap_url = spcap_url, pcap_rule = spcap_rule,
+        qtype = qtype_name, rcode = rcode_name, ans = to_string(answers),
+        http_host = if(_path = "http", host, null), ua = user_agent, status = status_code,
+        mime = to_string(resp_mime_types), resp_len = response_body_len,
+        sni = server_name, tls_ver = if(_path = "ssl", version, null), ssl_valid = validation_status,
+        ssl_subject = if(_path = "ssl", subject, null), ssl_issuer = if(_path = "ssl", issuer, null),
+        f_mime = mime_type, f_name = filename, f_bytes = seen_bytes, f_source = source,
+        x1 = if(_path = "notice", note, if(_path = "weird", name, if(_path = "kerberos", request_type, if(_path = "ntlm", domainname,
+             if(_path = "ssh", client, if(_path = "rdp", cookie, if(_path = "smb_files", action, if(_path = "dce_rpc", endpoint,
+             if(_path = "dhcp", coalesce(client_fqdn, host_name), if(_path = "smtp", mailfrom, if(_path = "ftp", command, null))))))))))),
+        x2 = if(_path = "notice", msg, if(_path = "kerberos", client, if(_path = "ntlm", username, if(_path = "ssh", server,
+             if(_path = "rdp", result, if(_path in ("smb_files", "smb_mapping"), path, if(_path = "dce_rpc", operation,
+             if(_path = "dhcp", assigned_addr, if(_path = "smtp", to_string(rcptto), if(_path = "ftp", arg, null)))))))))),
+        x3 = if(_path = "notice", sub, if(_path = "kerberos", service, if(_path = "ntlm", hostname, if(_path = "smb_files", name,
+             if(_path = "smtp", subject, null))))),
+        x4 = if(_path in ("kerberos", "ntlm", "ssh"), to_string(coalesce(success, auth_success)), null),
+        cid = community_id
+| fields ts, ctx, path, uid, src, sport, dst, dport, proto, sig, sid, sig_cat, sig_sev,
+         svc, dur, ob, rb, state, hist, pcap_url, pcap_rule,
+         query, qtype, rcode, ans, method, http_host, uri, ua, status, referrer, mime, resp_len,
+         sni, tls_ver, ja3, ja3s, ssl_valid, ssl_subject, ssl_issuer,
+         f_name, f_mime, f_bytes, f_source, md5, sha256,
+         x1, x2, x3, x4, cid
+| sort asc ts
+| limit 500000
