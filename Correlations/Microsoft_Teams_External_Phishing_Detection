@@ -21,3 +21,45 @@ dataset = saas_audit_logs
 | filter UserChatName ~= "(?i)^(?:\b(?:help(?:desk)?|it|service|support|tech|abuse|admin(?:istrator)?|account|alert|assistant|audit|authentication|azure|compliance|corporate|cyber|domain|duo|emergency|entra|finance|fraud|hr|human|identity|incident|legal|m365|mfa|microsoft|network|notification|okta|operations|password|payable|payroll|reset|security|sharepoint|soc|system|teams|threat|verif(?:y|ication))\b.*(?:admin(?:istrator)?|agent|bot|department|desk|resources|support|technician)?)"
     or UserID ~= "(?i)^(?:(?:\b(?:help|it|service|support|tech|abuse|admin(?:istrator)?|account|alert|assistant|audit|authentication|azure|compliance|corporate|cyber|domain|duo|emergency|entra|finance|fraud|hr|human|identity|incident|legal|m365|mfa|microsoft|network|notification|okta|operations|password|payable|payroll|reset|security|sharepoint|soc|system|teams|threat|verif(?:y|ication))[\._%+\-]?(?:desk|support|admin(?:istrator)?|agent|bot|resources|technician)?).*?@.+)"
 | fields _time, identity_name, UserChatName, UserID, sender_domain, InternalUPN, InternalDisplayName, operation_name_orig, referenced_resource_name, caller_ip, caller_ip_asn, caller_ip_geolocation, caller_infrastructure, caller_behaviors, caller_client_proxies, caller_tunnels_entries, caller_tunnels_exits, caller_tunnels_operator, caller_tunnels_anonymous, caller_tunnels_type, caller_tunnels_data, caller_risks, raw_log
+
+
+V2
+// Microsoft Teams External Chat Phishing / Helpdesk Impersonation (binary)
+// Fires on any external-sender 1:1 or group chat message when ANY of:
+//   - sender display name or UPN local-part impersonates helpdesk/IT/security/etc.
+//   - sender domain is a bare *.onmicrosoft.com tenant (no vanity domain = throwaway tenant)
+//   - sender domain uses a free/abused/PhaaS-common TLD
+//   - sender client reports a non-US country
+//   - chat was created by the external party from a commercial (non-GCC) tenant not in the partner allowlist
+// Uncomment the identity filter to scope to one victim; recipient_oid = victim AAD object id for 1:1 chats
+
+dataset = saas_audit_logs
+| filter service_type = "MicrosoftTeams" and operation_name_orig in ("MessageSent", "ChatCreated")
+| alter comm          = json_extract_scalar(raw_log, "$.CommunicationType"),
+        foreign       = json_extract_scalar(raw_log, "$.ParticipantInfo.HasForeignTenantUsers"),
+        sender        = lowercase(json_extract_scalar(raw_log, "$.UserId")),
+        sender_name   = json_extract_scalar(raw_log, "$.DisplayName"),
+        sender_key    = json_extract_scalar(raw_log, "$.UserKey"),
+        sender_tenant = json_extract_scalar(raw_log, "$.ResourceTenantId"),
+        org_tenant    = json_extract_scalar(raw_log, "$.OrganizationId"),
+        thread        = json_extract_scalar(raw_log, "$.ChatThreadId"),
+        client_ip     = json_extract_scalar(raw_log, "$.ClientIP"),
+        props         = json_extract(raw_log, "$.ExtraProperties")
+| filter comm in ("OneOnOne", "GroupChat") and foreign = "true"
+| alter sender_domain = arrayindex(regextract(sender, "@(.+)$"), 0),
+        country       = lowercase(arrayindex(regextract(props, "\"Country\",\"Value\":\"([^\"]+)"), 0)),
+        origin_env    = arrayindex(regextract(props, "\"OriginEnvironment\",\"Value\":\"([^\"]+)"), 0)
+| filter sender_domain != null and sender_domain != "" //Fill your domain
+    and sender !~= "#ext#@" //If you have guest users, fill in your domain before the ext
+| alter external_initiated = if(sender_tenant != org_tenant, "true", "false"),
+        recipient_oid = if(comm = "OneOnOne", replace(replace(replace(replace(thread, "19:", ""), "@unq.gbl.spaces", ""), concat(sender_key, "_"), ""), concat("_", sender_key), ""), null)
+//| filter recipient_oid = "<VICTIM_AAD_OBJECT_ID>"
+| filter sender_name ~= "(?i)^(?:\b(?:help(?:desk)?|it|service|support|tech|abuse|admin(?:istrator)?|account|alert|assistant|audit|authentication|azure|compliance|corporate|cyber|domain|duo|emergency|entra|finance|fraud|hr|human|identity|incident|legal|m365|mfa|microsoft|network|notification|okta|operations|password|payable|payroll|reset|security|sharepoint|soc|system|teams|threat|verif(?:y|ication))\b.*(?:admin(?:istrator)?|agent|bot|department|desk|resources|support|technician)?)"
+    or sender ~= "(?i)^(?:help(?:desk)?|it|service|support|tech|admin(?:istrator)?|security|soc|mfa|password|reset|microsoft|m365|entra|azure)[._-]?"
+    or sender_domain contains ".onmicrosoft.com"
+    or sender_domain ~= "\.(top|xyz|club|buzz|icu|cyou|sbs|live|online|site|fun|store|vip|work|rest|space|link|click|shop|cfd|lol|bond|pro|info|biz|cc|tk|ml|ga|cf|gq)$"
+    or (country != null and country != "us")
+    or (operation_name_orig = "MessageSent" and external_initiated = "true" and origin_env = null
+        and sender_tenant not in (""))  // Fill with any known good tenant ids
+| fields _time, operation_name_orig, sender, sender_name, sender_domain, sender_tenant, external_initiated, origin_env, country, client_ip, comm, thread, recipient_oid, raw_log
+| sort desc _time
