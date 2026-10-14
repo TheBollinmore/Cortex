@@ -1,0 +1,764 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NSM Workbench</title>
+<style>:root{
+  --bg:#f5f6f8; --panel:#fff; --ink:#1a1e24; --muted:#5d6672; --line:#dde1e6; --soft:#eef1f4; --accent:#2f6fde;
+  --hi:#c62828; --med:#d97706; --lo:#2f6fde; --ok:#15803d;
+  --s-process:#7c3aed; --s-network:#0e7490; --s-file:#b45309; --s-registry:#be185d; --s-evtlog:#475569; --s-logon:#15803d;
+  --t-mal:#c62828; --t-sus:#d97706; --t-ben:#15803d; --t-note:#2f6fde;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0e1116; --panel:#161a20; --ink:#e5e8ec; --muted:#98a1ad; --line:#2a3039; --soft:#1d222a; --accent:#6ea0ff;
+  --hi:#ff6b61; --med:#fbbf24; --lo:#6ea0ff; --ok:#4ade80;
+  --s-process:#a78bfa; --s-network:#22d3ee; --s-file:#f59e0b; --s-registry:#f472b6; --s-evtlog:#94a3b8; --s-logon:#4ade80;
+  --t-mal:#ff6b61; --t-sus:#fbbf24; --t-ben:#4ade80; --t-note:#6ea0ff; } }
+:root[data-theme="dark"]{
+  --bg:#0e1116; --panel:#161a20; --ink:#e5e8ec; --muted:#98a1ad; --line:#2a3039; --soft:#1d222a; --accent:#6ea0ff;
+  --hi:#ff6b61; --med:#fbbf24; --lo:#6ea0ff; --ok:#4ade80;
+  --s-process:#a78bfa; --s-network:#22d3ee; --s-file:#f59e0b; --s-registry:#f472b6; --s-evtlog:#94a3b8; --s-logon:#4ade80;
+  --t-mal:#ff6b61; --t-sus:#fbbf24; --t-ben:#4ade80; --t-note:#6ea0ff; }
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:13px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+button,input,select,textarea{font:inherit;color:var(--ink)}
+button{background:var(--soft);border:1px solid var(--line);border-radius:6px;padding:4px 10px;cursor:pointer}
+button:hover{border-color:var(--accent)} button.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+button.sm{padding:1px 7px;font-size:11px}
+input[type=text],input[type=datetime-local],select,textarea{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:4px 8px}
+code,.mono{font-family:ui-monospace,Consolas,"Cascadia Mono",monospace;font-size:12px}
+a.pv{color:inherit;text-decoration:underline dotted var(--muted);cursor:pointer} a.pv:hover{color:var(--accent)}
+header{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
+header h1{margin:0;font-size:15px;font-weight:650} header .meta{color:var(--muted);font-size:12px}
+header .sp{flex:1}
+#bar{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;padding:8px 16px;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:43px;z-index:19}
+#bar label{display:flex;align-items:center;gap:5px;color:var(--muted);white-space:nowrap}
+#q{width:240px}
+#chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:5px;background:var(--soft);border:1px solid var(--line);border-radius:999px;padding:1px 4px 1px 9px;font-size:12px}
+.chip b{font-weight:600;color:var(--muted)} .chip button{border:0;background:none;padding:0 5px;color:var(--muted)}
+#hist{padding:6px 16px 0;background:var(--panel);border-bottom:1px solid var(--line)}
+#hist svg{display:block;width:100%;height:74px;cursor:crosshair;user-select:none}
+#hist .ax{fill:var(--muted);font-size:10px}
+#tabs{display:flex;gap:2px;padding:0 16px;background:var(--panel);border-bottom:1px solid var(--line);overflow-x:auto}
+#tabs button{border:0;border-bottom:2px solid transparent;border-radius:0;background:none;padding:9px 12px;color:var(--muted);white-space:nowrap}
+#tabs button.on{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
+#tabs .ct{font-size:11px;color:var(--muted);margin-left:4px;font-variant-numeric:tabular-nums}
+main{padding:14px 16px 60px;max-width:100%}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;min-width:0}
+.card h3{margin:0 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:14px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;cursor:pointer}
+.stat .v{font-size:20px;font-weight:650;font-variant-numeric:tabular-nums} .stat .k{color:var(--muted);font-size:12px}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th,td{padding:5px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{color:var(--muted);font-weight:500;font-size:12px;position:sticky;top:0;background:var(--panel);white-space:nowrap}
+td.n,th.n{text-align:right} td.t{white-space:nowrap;color:var(--muted)}
+td.wrap{word-break:break-all;max-width:640px}
+tbody tr{cursor:pointer} tbody tr:hover td{background:var(--soft)}
+tr.sel td{background:color-mix(in srgb,var(--accent) 14%,transparent)!important}
+tr.pivot td{box-shadow:inset 0 2px 0 var(--accent)}
+.tw{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:calc(100vh - 290px)}
+.pager{display:flex;gap:8px;align-items:center;margin:8px 0;color:var(--muted)}
+.sec{display:inline-block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;padding:1px 6px;border-radius:4px;color:#fff}
+.sec.process{background:var(--s-process)} .sec.network{background:var(--s-network)} .sec.file{background:var(--s-file)} .sec.registry{background:var(--s-registry)} .sec.evtlog{background:var(--s-evtlog)}
+.fb{display:inline-block;font-size:10px;padding:0 5px;border-radius:4px;margin:0 3px 2px 0;border:1px solid currentColor;white-space:nowrap}
+.fb.high{color:var(--hi)} .fb.med{color:var(--med)} .fb.low{color:var(--lo)}
+.tag{display:inline-block;font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;color:#fff;margin-right:4px}
+.tag.mal{background:var(--t-mal)} .tag.sus{background:var(--t-sus)} .tag.ben{background:var(--t-ben)} .tag.note{background:var(--t-note)}
+.muted{color:var(--muted)} .ext{color:var(--hi);font-weight:600}
+.bad{color:var(--hi)} .ok{color:var(--ok)}
+.find{display:flex;gap:10px;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--line);cursor:pointer}
+.find:last-child{border-bottom:0} .find .c{margin-left:auto;font-variant-numeric:tabular-nums;color:var(--muted)}
+.find .sv{width:8px;height:8px;border-radius:50%;flex:none;transform:translateY(-1px)}
+.sv.high{background:var(--hi)} .sv.med{background:var(--med)} .sv.low{background:var(--lo)}
+.bars .b{display:grid;grid-template-columns:minmax(0,1fr) 60px;gap:8px;padding:3px 0;cursor:pointer;align-items:center}
+.bars .b .l{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bars .b .r{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}
+.bars .b .fill{grid-column:1/3;height:3px;background:var(--accent);border-radius:2px;opacity:.55}
+/* tree */
+.tree{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 10px;overflow:auto;max-height:calc(100vh - 290px)}
+.tree details{margin-left:18px;border-left:1px dotted var(--line);padding-left:6px}
+.tree > details{margin-left:0;border-left:0}
+.tree summary{list-style:none;cursor:pointer;padding:2px 0;white-space:nowrap}
+.tree summary::-webkit-details-marker{display:none}
+.tree summary::before{content:'▸';display:inline-block;width:12px;color:var(--muted)}
+.tree details[open]>summary::before{content:'▾'}
+.tree details.leaf>summary::before{content:'·'}
+.tree .pn{font-weight:600} .tree .pc{color:var(--muted);font-family:ui-monospace,Consolas,monospace;font-size:11.5px;margin-left:6px}
+.tree .act{font-size:11px;color:var(--muted);margin-left:6px}
+.tree .hit>summary{background:color-mix(in srgb,var(--hi) 10%,transparent);border-radius:4px}
+/* drawer */
+#drawer{position:fixed;top:0;right:0;bottom:0;width:min(560px,100vw);background:var(--panel);border-left:1px solid var(--line);box-shadow:-8px 0 24px rgba(0,0,0,.15);z-index:40;transform:translateX(100%);transition:transform .15s;display:flex;flex-direction:column}
+#drawer.open{transform:none}
+#drawer .hd{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line)}
+#drawer .hd h2{margin:0;font-size:14px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#drawer .bd{padding:12px 14px;overflow:auto}
+.kv{display:grid;grid-template-columns:130px minmax(0,1fr);gap:4px 10px;font-size:12.5px}
+.kv dt{color:var(--muted)} .kv dd{margin:0;word-break:break-all}
+.row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.tb button.mal{border-color:var(--t-mal)} .tb button.sus{border-color:var(--t-sus)} .tb button.ben{border-color:var(--t-ben)}
+.tb button.on{color:#fff} .tb button.mal.on{background:var(--t-mal)} .tb button.sus.on{background:var(--t-sus)} .tb button.ben.on{background:var(--t-ben)}
+textarea{width:100%;min-height:70px;resize:vertical}
+h4{margin:14px 0 6px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+/* drop */
+#drop{margin:40px auto;max-width:760px;border:2px dashed var(--line);border-radius:14px;padding:40px 24px;text-align:center;background:var(--panel);cursor:pointer;display:flex;flex-direction:column;gap:10px;align-items:center}
+#drop.over{border-color:var(--accent)} #drop b{font-size:17px}
+#drop .hint{color:var(--muted);max-width:560px}
+.hidden{display:none!important}
+@media (max-width:700px){#q{width:100%} .kv{grid-template-columns:1fr} #bar{position:static} header{position:static}}
+/* grid */
+.gbar{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin:0 0 8px;color:var(--muted)}
+.gbar select{padding:2px 6px}
+th .sh{cursor:pointer;user-select:none;display:inline-flex;gap:4px;align-items:center}
+th .sh:hover{color:var(--ink)} th .ar{font-size:10px;color:var(--accent)}
+tr.fr th{top:31px;padding:3px 4px;background:var(--panel)}
+tr.fr input{width:100%;min-width:60px;padding:2px 6px;font-size:12px;border-radius:4px}
+tr.fr input.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,var(--bg))}
+td.mono{font-family:ui-monospace,Consolas,monospace;font-size:11.5px}
+#pop{position:fixed;z-index:60;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:4px;min-width:200px;max-width:420px}
+#pop .pv0{padding:6px 8px;font-size:12px;color:var(--muted);word-break:break-all;border-bottom:1px solid var(--line);margin-bottom:3px}
+#pop button{display:block;width:100%;text-align:left;border:0;background:none;padding:6px 8px;border-radius:5px}
+#pop button:hover{background:var(--soft)}
+#colpick{position:fixed;z-index:60;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:8px 10px;max-height:70vh;overflow:auto;columns:2;column-gap:18px;min-width:360px}
+#colpick label{display:flex;gap:6px;align-items:center;padding:2px 0;break-inside:avoid;white-space:nowrap}
+.chip.neg{border-color:var(--hi)} .chip.neg b{color:var(--hi)}
+.help{font-size:12px;color:var(--muted)}
+pre.json{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px;white-space:pre-wrap;word-break:break-all;font-size:11.5px;max-height:320px;overflow:auto}
+.sec.module{background:#0f766e}
+:root{--s-module:#0f766e}
+a.pcap{display:inline-block;padding:1px 8px;border:1px solid var(--accent);border-radius:5px;color:var(--accent);text-decoration:none;font-size:12px;white-space:nowrap}
+a.pcap:hover{background:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<header>
+  <h1 id="ttl">NSM Workbench</h1><span class="meta" id="meta">Corelight / Suricata alert investigation · offline</span>
+  <span class="sp"></span>
+  <span class="meta" id="casest"></span>
+  <button id="b-report" class="hidden" title="Download a Markdown report of tagged items and notes">Export report</button>
+  <button id="b-case" class="hidden" title="Download tags + notes as JSON">Export case</button>
+  <button id="b-load" class="hidden" onclick="location.reload()">Load another</button>
+  <button id="b-theme" title="Toggle theme">◐</button>
+</header>
+<div id="bar" class="hidden">
+  <input type="text" id="q" placeholder="Search everything… (Enter)">
+  <label title="Either side of the connection">IP <select id="f-ip"></select></label>
+  <label>Log <select id="f-log"></select></label>
+  <label>From <input type="datetime-local" id="f-from" step="1"></label>
+  <label>To <input type="datetime-local" id="f-to" step="1"></label>
+  <label title="Alert time: marks the timeline and can scope the window">Alert <input type="datetime-local" id="f-pivot" step="1"></label>
+  <select id="f-win" title="Window around the alert time"><option value="">no window</option><option value="5">±5 min</option><option value="15">±15 min</option><option value="60">±1 h</option><option value="240">±4 h</option><option value="1440">±24 h</option></select>
+  <label title="Only the queried alert session, other alerts/notices, and records sharing their uid"><input type="checkbox" id="f-alertsess"> Alert sessions only</label>
+  <label title="Hide records where both sides are private addresses"><input type="checkbox" id="f-ext"> Involves external</label>
+  <label title="Only rows with a triage flag"><input type="checkbox" id="f-flagged"> Flagged only</label>
+  <label><input type="checkbox" id="f-tagged"> Tagged only</label>
+  <span id="chips"></span>
+  <button id="f-clear">Clear filters</button>
+</div>
+<div id="hist" class="hidden"></div>
+<nav id="tabs" class="hidden"></nav>
+<main id="main">
+  <label id="drop"><input type="file" id="file" accept=".csv,.tsv,.txt,.json" multiple hidden>
+    <b>Drop the Corelight export here</b>
+    <span class="hint">CSV or TSV from <code>nsm-alert-export.xql</code>. Several exports can be dropped together. You can also add a case <code>.json</code> to restore your tags and notes. Everything is parsed locally in this browser tab. Nothing is uploaded.</span>
+    <span class="hint" id="dropmsg"></span>
+  </label>
+</main>
+<div id="pop" class="hidden"></div><div id="colpick" class="hidden"></div>
+<aside id="drawer"><div class="hd"><h2 id="dr-t"></h2><button id="dr-x">Close</button></div><div class="bd" id="dr-b"></div></aside>
+<script>(function(){
+'use strict';
+// ================= utils =================
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num = v => { const n = parseFloat(String(v ?? '').replace(/,/g,'')); return isFinite(n) ? n : 0; };
+const fmtN = n => (n ?? 0).toLocaleString();
+const pad = n => String(n).padStart(2,'0');
+const fmtT = ms => { if(ms==null||ms==='') return ''; const d=new Date(ms); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; };
+const toLocalInput = ms => ms==null ? '' : fmtT(ms).replace(' ','T');
+const fromLocalInput = v => { if(!v) return null; const t = new Date(v).getTime(); return isFinite(t) ? t : null; };
+const TZ = (()=>{ const o=-new Date().getTimezoneOffset(); return 'UTC'+(o>=0?'+':'-')+pad(Math.floor(Math.abs(o)/60))+(Math.abs(o)%60?':'+pad(Math.abs(o)%60):''); })();
+function parseT(v){
+  if(v==null||v==='') return null; const s=String(v).trim();
+  if(/^\d{12,14}$/.test(s)) return +s;
+  if(/^\d{9,11}(\.\d+)?$/.test(s)) return Math.round(+s*1000);
+  const t = Date.parse(s.replace(/(\d)(st|nd|rd|th)\b/,'$1'));
+  return isFinite(t) ? t : null;
+}
+const isPriv = ip => /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|127\.|169\.254\.|0\.0\.0\.0|fe80:|fc|fd|::1$|::$)/i.test(ip||'');
+const base = p => String(p||'').split(/[\\/]/).pop();
+const dirOf = p => { p=String(p||''); const i=Math.max(p.lastIndexOf('\\'),p.lastIndexOf('/')); return i>0?p.slice(0,i):''; };
+const extOf = p => { const b=base(p); const i=b.lastIndexOf('.'); return i>0?b.slice(i+1).toLowerCase():''; };
+const lc = s => String(s??'').toLowerCase();
+const trunc = (s,n=160) => { s=String(s??''); return s.length>n ? s.slice(0,n)+'…' : s; };
+function download(name, text, type){ const b=new Blob([text],{type}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),2000); }
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const LS = { get(k,d){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):d; }catch(e){ return d; } }, set(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); return true; }catch(e){ return false; } } };
+
+// ================= parsing =================
+function parseDelim(text){
+  text=text.replace(/^﻿/,'');
+  const nl=text.indexOf('\n'), first=text.slice(0,nl>0?nl:text.length);
+  const d=(first.split('\t').length>first.split(',').length)?'\t':',';
+  let rows=[];
+  if(d==='\t'){
+    // TSV: tabs and newlines are always separators; unwrap a field only if it is fully quoted
+    const unq=f=>{ if(f.length>1&&f[0]==='"'&&f[f.length-1]==='"') return f.slice(1,-1).replace(/""/g,'"'); return f; };
+    for(const line of text.split(/\r?\n/)){ if(line==='') continue; rows.push(line.split('\t').map(unq)); }
+  } else {
+    let row=[],f='',q=false;
+    for(let i=0;i<text.length;i++){
+      const c=text[i];
+      if(q){ if(c==='"'){ if(text[i+1]==='"'){f+='"';i++;} else q=false; } else f+=c; }
+      else if(c==='"' && f==='') q=true;
+      else if(c===d){ row.push(f); f=''; }
+      else if(c==='\n'||c==='\r'){ if(c==='\r'&&text[i+1]==='\n') i++; row.push(f); f=''; if(row.length>1||row[0]!=='') rows.push(row); row=[]; }
+      else f+=c;
+    }
+    if(f!==''||row.length){ row.push(f); rows.push(row); }
+  }
+  const hdr=(rows.shift()||[]).map(h=>h.trim().toLowerCase());
+  return {hdr, rows, delim:d};
+}
+
+// ================= schema =================
+const COLS = ['ts','ctx','path','uid','cid','src','sport','dst','dport','proto','svc','dur','ob','rb','opk','rpk','state','hist','pcap_url','pcap_rule','pcap_trigger',
+  'query','qtype','rcode','ans','method','http_host','uri','ua','status','referrer','mime','req_len','resp_len',
+  'sni','tls_ver','cipher','ja3','ja3s','ssl_valid','ssl_subject','ssl_issuer',
+  'fuid','f_mime','f_name','md5','sha1','sha256','f_bytes','f_source',
+  'note','msg','notice_sub','weird_name','sig','sid','sig_cat','sig_sev',
+  'krb_type','krb_client','krb_service','ntlm_user','ntlm_host','ntlm_domain','ok',
+  'smb_action','smb_name','smb_path','rpc_endpoint','rpc_op','rdp_cookie','rdp_result','ssh_client','ssh_server',
+  'dhcp_name','dhcp_addr','mailfrom','rcptto','smtp_subject','ftp_cmd','ftp_arg','x1','x2','x3','x4'];
+const ALIAS = {pcap_url:['pcap_url','spcap_url','spcap.url'],pcap_rule:['pcap_rule','spcap_rule','spcap.rule'],pcap_trigger:['pcap_trigger','spcap_trigger','spcap.trigger'],ctx:['ctx','context'],ts:['ts','_time','time','first_ms'],path:['path','_path','log'],src:['src','id_orig_h'],dst:['dst','id_resp_h'],sport:['sport','id_orig_p'],dport:['dport','id_resp_p'],
+  svc:['svc','service'],dur:['dur','duration'],ob:['ob','orig_bytes'],rb:['rb','resp_bytes'],opk:['opk','orig_pkts'],rpk:['rpk','resp_pkts'],state:['state','conn_state'],hist:['hist','history'],
+  qtype:['qtype','qtype_name'],rcode:['rcode','rcode_name'],ans:['ans','answers'],ua:['ua','user_agent'],status:['status','status_code'],sni:['sni','server_name'],cid:['cid','community_id'],
+  sig:['sig','alert_signature','alert.signature'],sid:['sid','alert_signature_id','alert.signature_id'],sig_cat:['sig_cat','alert_category','alert.category'],sig_sev:['sig_sev','alert_severity','alert.severity']};
+const DEF = Object.fromEntries(COLS.map(c=>[c,'']));
+const FAM = {conn:'conn',dns:'dns',http:'http',ssl:'tls',x509:'tls',files:'files',suricata_corelight:'alert',suricata:'alert',notice:'notice',weird:'weird',
+  kerberos:'auth',ntlm:'auth',ssh:'auth',rdp:'auth',radius:'auth',smb_files:'smb',smb_mapping:'smb',dce_rpc:'smb',dhcp:'other',smtp:'other',ftp:'other'};
+const FAMS = ['alert','notice','conn','dns','http','tls','files','auth','smb','weird','other'];
+const FCOL = {alert:'#c62828',notice:'#d97706',conn:'#0e7490',dns:'#7c3aed',http:'#b45309',tls:'#15803d',files:'#be185d',auth:'#2563eb',smb:'#475569',weird:'#6b7280',other:'#94a3b8'};
+const STATES = {S0:'no reply',S1:'established, not closed',SF:'normal close',REJ:'rejected',S2:'orig close only',S3:'resp close only',RSTO:'orig reset',RSTR:'resp reset',RSTOS0:'orig SYN then RST',RSTRH:'resp SYN-ACK then RST',SH:'orig SYN+FIN, no SYN-ACK',SHR:'resp SYN-ACK+FIN only',OTH:'midstream'};
+const fmtB = b => { if(b===''||b==null) return ''; b=+b||0; if(!b) return b===0?'0':''; const u=['B','KB','MB','GB','TB']; let i=0; while(b>=1024&&i<u.length-1){ b/=1024; i++; } return (i?b.toFixed(1):b)+' '+u[i]; };
+const fmtD = s => { if(s===''||s==null) return ''; s=+s; if(!s&&s!==0) return ''; if(s<1) return (s*1000).toFixed(0)+' ms'; if(s<60) return s.toFixed(1)+' s'; if(s<3600) return (s/60).toFixed(1)+' m'; return (s/3600).toFixed(1)+' h'; };
+function clean(v){ v=String(v??'').trim(); return (v==='-'||v==='null'||v==='NULL'||v==='[]'||v==='{}'||v==='""'||v==='(empty)')?'':v.replace(/^\[(.*)\]$/s,'$1').replace(/^"(.*)"$/s,'$1').replace(/","/g,', '); }
+function hash(s){ let h=2166136261>>>0; for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619)>>>0; } return h.toString(36); }
+
+// packed protocol columns (x1..x4) -> real fields, per log type
+const XMAP = {notice:['note','msg','notice_sub'],weird:['weird_name'],kerberos:['krb_type','krb_client','krb_service','ok'],ntlm:['ntlm_domain','ntlm_user','ntlm_host','ok'],
+  ssh:['ssh_client','ssh_server',null,'ok'],rdp:['rdp_cookie','rdp_result'],smb_files:['smb_action','smb_path','smb_name'],smb_mapping:[null,'smb_path'],dce_rpc:['rpc_endpoint','rpc_op'],
+  dhcp:['dhcp_name','dhcp_addr'],smtp:['mailfrom','rcptto','smtp_subject'],ftp:['ftp_cmd','ftp_arg']};
+const PACKED = new Set(Object.values(XMAP).flat().filter(Boolean));
+// ================= rows =================
+function toRows(p){
+  const idx={}; COLS.forEach(c=>{ const names=ALIAS[c]||[c]; for(const n of names){ const i=p.hdr.indexOf(n); if(i>=0){ idx[c]=i; break; } } });
+  if(idx.path==null||(idx.src==null&&idx.uid==null)) throw new Error('This does not look like nsm-alert-export.xql output (needs path + src/dst or uid). Columns seen: '+p.hdr.slice(0,12).join(', '));
+  const out=[], ent=Object.entries(idx);
+  const dg=S.diag; dg.delim=p.delim==='\t'?'TSV':'CSV'; dg.header=p.hdr; dg.packed=['x1','x2','x3','x4'].some(c=>idx[c]!=null); dg.missing=COLS.filter(c=>idx[c]==null&&!['pcap_trigger','x1','x2','x3','x4'].includes(c)&&!(dg.packed&&PACKED.has(c)));
+  for(const a of p.rows){
+    if(a.length!==p.hdr.length){ dg.bad++; if(dg.samples.length<3) dg.samples.push({line:dg.rows+2,got:a.length,want:p.hdr.length,path:a[idx.path]||'',head:a.slice(0,6).join(' | ')}); }
+    dg.rows++;
+    const r=Object.create(DEF);
+    for(const [c,i] of ent){ const v=clean(a[i]); if(v) r[c]=v; }
+    r.path=lc(r.path);
+    { const m=XMAP[r.path]; if(m) m.forEach((f,j)=>{ const v=r['x'+(j+1)]; if(f&&v&&!r[f]) r[f]=v; }); }
+    r.sec=FAM[r.path]||'other'; r.ctx=lc(r.ctx); r.focus=r.ctx==='session';
+    r.t0=parseT(r.ts); const d=num(r.dur); r.t1=r.t0!=null&&d?r.t0+Math.round(d*1000):r.t0;
+    r.sx=!!r.src&&!isPriv(r.src); r.dx=!!r.dst&&!isPriv(r.dst);
+    r.dir = !r.src||!r.dst ? '' : (!r.sx&&r.dx?'outbound':r.sx&&!r.dx?'inbound':!r.sx&&!r.dx?'internal':'external');
+    out.push(r);
+  }
+  return out;
+}
+const safeUrl = u => /^https?:\/\//i.test(u||'') ? u : '';
+const pcapOf = r => r.pcap_url || r._spcap || '';
+const pcapLink = (r,label='PCAP') => { const u=safeUrl(pcapOf(r)); return u?`<a href="${esc(u)}" target="_blank" rel="noopener noreferrer" class="pcap" title="${esc(u)}">${label} ⤓</a>`:''; };
+const hostOf = r => r.sni || r.http_host || r.query || '';
+const url = r => r.http_host||r.uri ? (r.http_host||r.dst)+(r.dport&&!/^(80|443)$/.test(r.dport)?':'+r.dport:'')+(r.uri||'') : '';
+function summ(r){
+  const pair=`${r.src||'?'}${r.sport?':'+r.sport:''} → ${r.dst||'?'}${r.dport?':'+r.dport:''}`;
+  switch(r.path){
+    case 'suricata_corelight': case 'suricata': return `ALERT ${r.sig||'(signature?)'}${r.sid?' ['+r.sid+']':''}${r.sig_cat?' · '+r.sig_cat:''} · ${pair}`;
+    case 'notice': return `NOTICE ${r.note} ${r.msg}${r.notice_sub?' · '+r.notice_sub:''} · ${pair}`;
+    case 'conn': return `${pair} ${r.proto||''}${r.svc?'/'+r.svc:''} · ${r.state||''}${STATES[r.state]?' ('+STATES[r.state]+')':''} · ${fmtD(r.dur)} · ↑${fmtB(r.ob)} ↓${fmtB(r.rb)}`;
+    case 'dns': return `${r.src} asked ${r.qtype||''} ${r.query} → ${r.rcode||''} ${trunc(r.ans,160)}`;
+    case 'http': return `${r.method||''} ${url(r)} → ${r.status||''} ${r.mime||''}${r.ua?' · UA '+trunc(r.ua,80):''}`;
+    case 'ssl': return `TLS ${r.tls_ver||''} ${r.sni||'(no SNI)'} → ${r.dst}:${r.dport}${r.ssl_valid&&!/^ok$/i.test(r.ssl_valid)?' · cert: '+r.ssl_valid:''}${r.ja3?' · ja3 '+r.ja3.slice(0,12):''}`;
+    case 'files': return `FILE ${r.f_name||'(unnamed)'} ${r.f_mime||''} ${fmtB(r.f_bytes)} via ${r.f_source||''}${r.sha256?' · '+r.sha256.slice(0,16)+'…':r.md5?' · md5 '+r.md5:''}`;
+    case 'weird': return `WEIRD ${r.weird_name} · ${pair}`;
+    case 'kerberos': return `Kerberos ${r.krb_type||''} ${r.krb_client||''} → ${r.krb_service||''}${r.ok?' · success '+r.ok:''} · ${pair}`;
+    case 'ntlm': return `NTLM ${r.ntlm_domain?r.ntlm_domain+'\\':''}${r.ntlm_user||''} from ${r.ntlm_host||r.src}${r.ok?' · success '+r.ok:''} → ${r.dst}`;
+    case 'ssh': return `SSH ${r.src} → ${r.dst}:${r.dport} · auth ${r.ok||'?'} · ${r.ssh_client||''} / ${r.ssh_server||''}`;
+    case 'rdp': return `RDP ${r.src} → ${r.dst}${r.rdp_cookie?' · cookie '+r.rdp_cookie:''}${r.rdp_result?' · '+r.rdp_result:''}`;
+    case 'smb_files': return `SMB ${r.smb_action||''} ${r.smb_path||''}\\${r.smb_name||''} · ${r.src} → ${r.dst}`;
+    case 'smb_mapping': return `SMB map ${r.smb_path} · ${r.src} → ${r.dst}`;
+    case 'dce_rpc': return `RPC ${r.rpc_endpoint} ${r.rpc_op} · ${r.src} → ${r.dst}`;
+    case 'dhcp': return `DHCP ${r.dhcp_addr} = ${r.dhcp_name}`;
+    case 'smtp': return `SMTP ${r.mailfrom} → ${r.rcptto}${r.smtp_subject?' · '+r.smtp_subject:''}`;
+    case 'ftp': return `FTP ${r.ftp_cmd} ${r.ftp_arg} · ${pair}`;
+  }
+  return `${r.path} · ${pair}`;
+}
+function rowKey(r){ return hash([r.path,r.t0,r.ctx,r.uid,r.fuid,r.src,r.sport,r.dst,r.dport,r.query,r.uri,r.sid,r.note,r.smb_name].join('|')); }
+
+// ================= triage flags (a lens, not a verdict) =================
+const RULES = [
+  {id:'alert',sev:'high',t:'Suricata alert',f:r=>r.sec==='alert'},
+  {id:'session',sev:'high',t:'In the alert session (uid you queried)',f:r=>r.focus},
+  {id:'in-alert',sev:'med',t:'Same session (uid) as an alert or notice',f:r=>r.sec!=='alert'&&r.sec!=='notice'&&!!r.uid&&S.alertUids.has(r.uid)},
+  {id:'notice',sev:'med',t:'Zeek notice',f:r=>r.sec==='notice'},
+  {id:'cert-bad',sev:'med',t:'TLS certificate did not validate',f:r=>r.path==='ssl'&&!!r.ssl_valid&&!/^ok$/i.test(r.ssl_valid)},
+  {id:'no-sni',sev:'low',t:'Outbound TLS without SNI',f:r=>r.path==='ssl'&&!r.sni&&r.dx},
+  {id:'ip-host',sev:'med',t:'HTTP to a bare IP host',f:r=>r.path==='http'&&/^\d+\.\d+\.\d+\.\d+(:\d+)?$/.test(r.http_host)&&r.dx},
+  {id:'exe-dl',sev:'med',t:'Executable / script / archive transferred',f:r=>(r.path==='files'&&/x-dosexec|x-executable|x-msdownload|x-msi|java-archive|x-sh|x-python|zip|x-7z|x-rar|vnd\.ms-cab|x-iso9660/i.test(r.f_mime))||(r.path==='http'&&/x-dosexec|x-msdownload|x-msi/i.test(r.mime))},
+  {id:'big-out',sev:'med',t:'Large upload to external (≥ 50 MB)',f:r=>r.path==='conn'&&r.dir==='outbound'&&num(r.ob)>=50*1048576},
+  {id:'long',sev:'low',t:'Long connection (≥ 1 h) to external',f:r=>r.path==='conn'&&r.dx&&num(r.dur)>=3600},
+  {id:'nx',sev:'low',t:'DNS NXDOMAIN',f:r=>r.path==='dns'&&/NXDOMAIN/i.test(r.rcode)},
+  {id:'weird',sev:'low',t:'Protocol weirdness',f:r=>r.sec==='weird'},
+  {id:'auth-fail',sev:'low',t:'Authentication failure',f:r=>r.sec==='auth'&&/^(f|false)$/i.test(r.ok)},
+  {id:'odd-port',sev:'low',t:'Known protocol on a non-standard port',f:r=>r.path==='conn'&&!!r.svc&&!!r.dport&&!((/http/.test(r.svc)&&/^(80|8080|8000|8008|8888)$/.test(r.dport))||(/ssl|tls/.test(r.svc)&&/^(443|8443|993|995|465|636|3269|5986|9443)$/.test(r.dport))||(r.svc==='dns'&&r.dport==='53')||(r.svc==='ssh'&&r.dport==='22')||(r.svc==='smtp'&&/^(25|587)$/.test(r.dport))||!/^(http|ssl|dns|ssh|smtp)$/.test(r.svc))},
+];
+const RMAP = Object.fromEntries(RULES.map(x=>[x.id,x]));
+function runFindings(rows){ const hits={}; RULES.forEach(x=>hits[x.id]=[]); for(const r of rows){ r.f=[]; for(const x of RULES) if(x.f(r)){ r.f.push(x.id); hits[x.id].push(r); } } return hits; }
+
+// ================= columns =================
+const tagName = r => { const t=S.C.tags[r.key]; return t ? ({mal:'malicious',sus:'suspicious',ben:'benign'}[t.tag]||'')+(t.note?' note':'') : ''; };
+const tagCell = r => { const t=S.C.tags[r.key]; return (t&&t.tag?`<span class="tag ${t.tag}">${{mal:'MAL',sus:'SUS',ben:'OK'}[t.tag]}</span>`:'')+(t&&t.note?'<span class="tag note">NOTE</span>':''); };
+const fcell = r => r.f.map(id=>`<span class="fb ${RMAP[id].sev}" title="${esc(RMAP[id].t)}">${esc(id)}</span>`).join('');
+const B = k => ({h:k[0],get:r=>r[k[1]],num:1,c:'n',txt:r=>fmtB(r[k[1]]),nolink:1});
+const CD = {
+  time:{h:'Time',get:r=>r.t0,txt:r=>fmtT(r.t0),num:1,c:'t',nolink:1},
+  path:{h:'Log',get:r=>r.path,html:r=>`<span class="sec" style="background:${FCOL[r.sec]}">${esc(r.path.replace('suricata_corelight','suricata'))}</span>`},
+  fam:{h:'Family',get:r=>r.sec},
+  uid:{h:'uid',get:r=>r.uid,c:'mono'}, cid:{h:'Community ID',get:r=>r.cid,c:'mono'},
+  src:{h:'Source',get:r=>r.src}, sport:{h:'S.port',get:r=>r.sport,num:1},
+  dst:{h:'Destination',get:r=>r.dst}, dport:{h:'D.port',get:r=>r.dport,num:1},
+  pair:{h:'Pair',get:r=>r.src&&r.dst?`${r.src} → ${r.dst}`:''},
+  dir:{h:'Direction',get:r=>r.dir},
+  proto:{h:'Proto',get:r=>r.proto}, svc:{h:'Service',get:r=>r.svc},
+  dur:{h:'Duration',get:r=>r.dur,num:1,c:'n',txt:r=>fmtD(r.dur),nolink:1},
+  ob:B(['Bytes out','ob']), rb:B(['Bytes in','rb']),
+  tot:{h:'Bytes total',get:r=>(r.ob||r.rb)?num(r.ob)+num(r.rb):'',num:1,c:'n',txt:r=>(r.ob||r.rb)?fmtB(num(r.ob)+num(r.rb)):'',nolink:1},
+  opk:{h:'Pkts out',get:r=>r.opk,num:1}, rpk:{h:'Pkts in',get:r=>r.rpk,num:1},
+  state:{h:'Conn state',get:r=>r.state}, statex:{h:'State meaning',get:r=>STATES[r.state]||''}, hist:{h:'History',get:r=>r.hist,c:'mono'},
+  query:{h:'Query',get:r=>r.query}, qtype:{h:'QType',get:r=>r.qtype}, rcode:{h:'RCode',get:r=>r.rcode}, ans:{h:'Answers',get:r=>r.ans,c:'wrap'},
+  method:{h:'Method',get:r=>r.method}, http_host:{h:'HTTP host',get:r=>r.http_host}, uri:{h:'URI',get:r=>r.uri,c:'mono wrap'}, url:{h:'URL',get:url,c:'mono wrap'},
+  ua:{h:'User agent',get:r=>r.ua,c:'wrap'}, status:{h:'Status',get:r=>r.status,num:1}, referrer:{h:'Referrer',get:r=>r.referrer,c:'wrap'}, mime:{h:'Resp MIME',get:r=>r.mime},
+  req_len:B(['Req body','req_len']), resp_len:B(['Resp body','resp_len']),
+  sni:{h:'SNI',get:r=>r.sni}, tls_ver:{h:'TLS ver',get:r=>r.tls_ver}, cipher:{h:'Cipher',get:r=>r.cipher}, ja3:{h:'JA3',get:r=>r.ja3,c:'mono'}, ja3s:{h:'JA3S',get:r=>r.ja3s,c:'mono'},
+  ssl_valid:{h:'Cert validation',get:r=>r.ssl_valid}, ssl_subject:{h:'Cert subject',get:r=>r.ssl_subject,c:'wrap'}, ssl_issuer:{h:'Cert issuer',get:r=>r.ssl_issuer,c:'wrap'},
+  hostname:{h:'Name (SNI/host/query)',get:hostOf},
+  fuid:{h:'fuid',get:r=>r.fuid,c:'mono'}, f_name:{h:'File name',get:r=>r.f_name,c:'wrap'}, f_mime:{h:'File MIME',get:r=>r.f_mime}, f_bytes:B(['File size','f_bytes']), f_source:{h:'Via',get:r=>r.f_source},
+  md5:{h:'MD5',get:r=>r.md5,c:'mono'}, sha1:{h:'SHA1',get:r=>r.sha1,c:'mono'}, sha256:{h:'SHA256',get:r=>r.sha256,c:'mono'},
+  sig:{h:'Signature',get:r=>r.sig,c:'wrap'}, sid:{h:'SID',get:r=>r.sid,num:1}, sig_cat:{h:'Category',get:r=>r.sig_cat}, sig_sev:{h:'Severity',get:r=>r.sig_sev,num:1},
+  note:{h:'Notice',get:r=>r.note}, msg:{h:'Message',get:r=>r.msg,c:'wrap'}, notice_sub:{h:'Notice detail',get:r=>r.notice_sub,c:'wrap'}, weird_name:{h:'Weird',get:r=>r.weird_name},
+  krb_type:{h:'Krb request',get:r=>r.krb_type}, krb_client:{h:'Krb client',get:r=>r.krb_client}, krb_service:{h:'Krb service',get:r=>r.krb_service},
+  ntlm_user:{h:'NTLM user',get:r=>r.ntlm_user}, ntlm_host:{h:'NTLM host',get:r=>r.ntlm_host}, ntlm_domain:{h:'NTLM domain',get:r=>r.ntlm_domain}, ok:{h:'Success',get:r=>r.ok},
+  smb_action:{h:'SMB action',get:r=>r.smb_action}, smb_path:{h:'SMB path',get:r=>r.smb_path,c:'mono wrap'}, smb_name:{h:'SMB file',get:r=>r.smb_name,c:'mono wrap'},
+  rpc_endpoint:{h:'RPC endpoint',get:r=>r.rpc_endpoint}, rpc_op:{h:'RPC operation',get:r=>r.rpc_op},
+  rdp_cookie:{h:'RDP cookie',get:r=>r.rdp_cookie}, rdp_result:{h:'RDP result',get:r=>r.rdp_result}, ssh_client:{h:'SSH client',get:r=>r.ssh_client}, ssh_server:{h:'SSH server',get:r=>r.ssh_server},
+  dhcp_name:{h:'DHCP name',get:r=>r.dhcp_name}, dhcp_addr:{h:'DHCP addr',get:r=>r.dhcp_addr}, mailfrom:{h:'Mail from',get:r=>r.mailfrom}, rcptto:{h:'Rcpt to',get:r=>r.rcptto,c:'wrap'}, smtp_subject:{h:'Subject',get:r=>r.smtp_subject,c:'wrap'},
+  ftp_cmd:{h:'FTP cmd',get:r=>r.ftp_cmd}, ftp_arg:{h:'FTP arg',get:r=>r.ftp_arg,c:'wrap'},
+  ctx:{h:'Scope',get:r=>r.ctx},
+  pcap:{h:'PCAP',get:pcapOf,html:r=>pcapLink(r),nolink:1},
+  pcap_rule:{h:'PCAP rule',get:r=>r.pcap_rule||r._spcap_rule||''}, pcap_trigger:{h:'PCAP trigger',get:r=>r.pcap_trigger||r._spcap_trig||''},
+  what:{h:'Activity',get:summ,c:'wrap'},
+  flags:{h:'Flags',get:r=>r.f.join(' '),html:fcell,nolink:1}, tag:{h:'Tag',get:tagName,html:tagCell,nolink:1},
+};
+const cellTxt = (c,r) => { const d=CD[c]; if(!d) return ''; return d.txt ? d.txt(r) : String(d.get(r)??''); };
+
+// ================= tabs =================
+const TABS = [
+  {id:'overview',l:'Overview'},
+  {id:'session',l:'Alert session',pred:r=>r.focus,cols:['time','path','src','sport','dst','dport','what','pcap','tag']},
+  {id:'all',l:'All records',pred:()=>true,cols:['time','path','src','dst','dport','what','flags','tag']},
+  {id:'alerts',l:'Alerts & notices',pred:r=>r.sec==='alert'||r.sec==='notice',cols:['time','path','sig','sid','sig_cat','sig_sev','src','sport','dst','dport','note','msg','uid','pcap','tag'],group:''},
+  {id:'sessions',l:'Sessions',pred:r=>!!r.uid,cols:['time','path','uid','src','dst','dport','what','flags'],group:'uid'},
+  {id:'conn',l:'Connections',pred:r=>r.path==='conn',cols:['time','src','sport','dst','dport','proto','svc','dir','dur','ob','rb','state','hist','pcap','flags']},
+  {id:'dns',l:'DNS',pred:r=>r.path==='dns',cols:['time','src','dst','query','qtype','rcode','ans','flags']},
+  {id:'http',l:'HTTP',pred:r=>r.path==='http',cols:['time','src','dst','dport','method','http_host','uri','status','mime','ua','resp_len','flags']},
+  {id:'tls',l:'TLS',pred:r=>r.path==='ssl',cols:['time','src','dst','dport','sni','tls_ver','ssl_valid','ja3','ja3s','ssl_subject','flags']},
+  {id:'files',l:'Files',pred:r=>r.path==='files',cols:['time','f_source','f_name','f_mime','f_bytes','sha256','md5','uid','flags']},
+  {id:'auth',l:'Auth (Kerb/NTLM/SSH/RDP)',pred:r=>r.sec==='auth',cols:['time','path','src','dst','krb_type','krb_client','krb_service','ntlm_domain','ntlm_user','ntlm_host','ok','ssh_client','rdp_cookie','flags']},
+  {id:'smb',l:'SMB / RPC',pred:r=>r.sec==='smb',cols:['time','path','src','dst','smb_action','smb_path','smb_name','rpc_endpoint','rpc_op','flags']},
+  {id:'other',l:'Other',pred:r=>r.sec==='other'||r.sec==='weird',cols:['time','path','src','dst','dport','what','flags']},
+  {id:'tagged',l:'Tagged',pred:r=>!!S.C.tags[r.key],cols:['time','path','src','dst','what','tag'],all:1},
+];
+const TABM = Object.fromEntries(TABS.map(t=>[t.id,t]));
+const GEN = ['time','ctx','pcap','path','fam','uid','cid','src','sport','dst','dport','pair','dir','proto','hostname','what','flags','tag'];
+const COLS_FOR = { alerts:['sig','sid','sig_cat','sig_sev','note','msg','notice_sub'], conn:['svc','dur','ob','rb','tot','opk','rpk','state','statex','hist','pcap_rule','pcap_trigger'],
+  dns:['query','qtype','rcode','ans'], http:['method','http_host','uri','url','ua','status','referrer','mime','req_len','resp_len'],
+  tls:['sni','tls_ver','cipher','ja3','ja3s','ssl_valid','ssl_subject','ssl_issuer'], files:['fuid','f_name','f_mime','f_bytes','f_source','md5','sha1','sha256'],
+  auth:['krb_type','krb_client','krb_service','ntlm_user','ntlm_host','ntlm_domain','ok','ssh_client','ssh_server','rdp_cookie','rdp_result'],
+  smb:['smb_action','smb_path','smb_name','rpc_endpoint','rpc_op'], other:['weird_name','dhcp_name','dhcp_addr','mailfrom','rcptto','smtp_subject','ftp_cmd','ftp_arg'] };
+const colsFor = id => COLS_FOR[id] ? [...new Set([...GEN,...COLS_FOR[id]])] : Object.keys(CD);
+
+// ================= state =================
+const S = {diag:{rows:0,bad:0,samples:[],missing:[],header:[],delim:''},rows:[],ips:[],tmin:0,tmax:0,hits:{},byUid:new Map(),alertUids:new Set(),focus:new Set(),
+  f:{q:'',ip:'',log:'',from:null,to:null,chips:[],ext:false,flagged:false,tagged:false,alertsess:false},
+  tab:'overview',sel:null,caseKey:'',C:null,G:{},src:''};
+const GKEY='nsm-grid-v1';
+function grid(id){ if(!S.G[id]){ const t=TABM[id], sv=LS.get(GKEY,{})[id]||{}; S.G[id]={cols:(sv.cols||t.cols).filter(c=>CD[c]),sort:sv.sort||{c:'time',d:1},size:sv.size||250,cf:{},group:t.group||'',gsort:{c:t.id==='sessions'?'t0':'rows',d:t.id==='sessions'?1:-1},page:0}; } return S.G[id]; }
+function saveGrid(id){ const all=LS.get(GKEY,{}), g=S.G[id]; all[id]={cols:g.cols,sort:g.sort,size:g.size}; LS.set(GKEY,all); }
+
+// ================= case =================
+function blankCase(){ return {version:1,title:'',notes:'',pivot:null,win:'',tags:{},updated:null}; }
+let persistOK=true, dirty=false;
+function saveCase(){ S.C.updated=new Date().toISOString(); persistOK=LS.set(S.caseKey,S.C); dirty=true; caseStatus(); }
+function caseStatus(){ const n=Object.keys(S.C.tags).length; $('#casest').textContent=`${n} tagged`+(persistOK?' · autosaved in this browser':' · NOT persisted, use Export case')+(dirty?' · not exported':''); }
+function mergeCase(o){ const b=blankCase(); for(const k in b) if(o&&o[k]!=null) b[k]=o[k]; return b; }
+function alertMsg(s){ $('#casest').textContent=s; }
+
+// ================= filtering =================
+function winBounds(){ let from=S.f.from,to=S.f.to; const w=+S.C.win; if(S.C.pivot&&w){ from=S.C.pivot-w*60000; to=S.C.pivot+w*60000; } return [from,to]; }
+function blob(r){ if(r._b==null){ let s=''; for(const k in r){ if(k[0]!=='_'&&typeof r[k]==='string') s+=r[k]+' '; } r._b=lc(s); } return r._b; }
+function chipTest(c){ const v=lc(c.v);
+  if(c.c==='ip') return r=>lc(r.src)===v||lc(r.dst)===v;
+  if(c.c==='hash') return r=>[r.md5,r.sha1,r.sha256].some(h=>lc(h)===v);
+  if(c.c==='conv'){ const [a,b]=v.split('|'); return r=>(lc(r.src)===a&&lc(r.dst)===b)||(lc(r.src)===b&&lc(r.dst)===a); }
+  if(c.c==='hostname') return r=>lc(hostOf(r))===v||lc(r.sni)===v||lc(r.http_host)===v||lc(r.query)===v;
+  return r=>lc(cellTxt(c.c,r))===v; }
+function globalFiltered(){
+  const f=S.f, [from,to]=winBounds(), q=lc(f.q).trim(), chips=f.chips.map(c=>{ const t=chipTest(c); return c.neg?(r=>!t(r)):t; });
+  return S.rows.filter(r=>{
+    if(f.ip && r.src!==f.ip && r.dst!==f.ip) return false;
+    if(f.log && r.path!==f.log) return false;
+    if(from!=null && (r.t1??r.t0)<from) return false;
+    if(to!=null && r.t0>to) return false;
+    if(f.ext && !r.sx && !r.dx && r.sec!=='alert') return false;
+    if(f.flagged && !r.f.length) return false;
+    if(f.tagged && !S.C.tags[r.key]) return false;
+    if(f.alertsess && !(r.sec==='alert'||r.sec==='notice'||(r.uid&&S.alertUids.has(r.uid)))) return false;
+    for(const t of chips) if(!t(r)) return false;
+    if(q && !blob(r).includes(q)) return false;
+    return true;
+  });
+}
+function addChip(c,v,neg=false){ if(v===''||v==null) return; v=String(v); const i=S.f.chips.findIndex(x=>x.c===c&&lc(x.v)===lc(v)); if(i>=0) S.f.chips.splice(i,1); S.f.chips.push({c,v,neg}); Object.values(S.G).forEach(g=>g.page=0); render(); }
+const CHIPN = c => ({ip:'IP (either side)',hash:'any hash',conv:'conversation',hostname:'name'}[c]||CD[c]?.h||c);
+function cfFn(expr,col){
+  expr=String(expr||'').trim(); if(!expr) return null;
+  let neg=false; if(expr[0]==='!'&&expr.length>1){ neg=true; expr=expr.slice(1).trim(); }
+  let f; const d=CD[col], raw=d.num&&col!=='time';
+  if(expr==='='||expr==='""') f=v=>v===''||v==null;
+  else if(expr==='*') f=v=>v!==''&&v!=null;
+  else if(/^\/.+\/$/.test(expr)){ let re; try{ re=new RegExp(expr.slice(1,-1),'i'); }catch(e){ return null; } f=v=>re.test(v); }
+  else if(raw && /^(>=|<=|>|<)\s*-?\d+(\.\d+)?\s*(k|m|g|kb|mb|gb|s|m|h)?$/i.test(expr)){ const m=expr.match(/^(>=|<=|>|<)\s*(-?[\d.]+)\s*([a-z]*)$/i); let x=+m[2]; const u=lc(m[3]); const mult={k:1024,kb:1024,m:col==='dur'?60:1048576,mb:1048576,g:1073741824,gb:1073741824,s:1,h:3600}[u]||1; x*=mult; f={'>':v=>v>x,'<':v=>v<x,'>=':v=>v>=x,'<=':v=>v<=x}[m[1]]; f._raw=1; }
+  else if(expr[0]==='='){ const x=lc(expr.slice(1)); f=v=>lc(v)===x; }
+  else { const parts=lc(expr).split('|').map(s=>s.trim()).filter(Boolean); f=v=>{ const s=lc(v); return parts.some(p=>s.includes(p)); }; }
+  const g = neg ? v=>!f(v) : f; g._raw=f._raw; return g;
+}
+function tabRows(id,base){
+  const t=TABM[id], g=grid(id); let R=(t.all?S.rows:base).filter(t.pred);
+  const fs=Object.entries(g.cf).map(([c,e])=>[c,cfFn(e,c)]).filter(x=>x[1]&&CD[x[0]]);
+  if(fs.length) R=R.filter(r=>fs.every(([c,fn])=> fn._raw ? fn(num(CD[c].get(r))) : fn(cellTxt(c,r))));
+  return R;
+}
+function sortRows(R,s){
+  const d=CD[s.c]||CD.time, dir=s.d||1;
+  const key = d.num ? (r=>{ const v=d.get(r); return v===''||v==null?-Infinity:+v; }) : (r=>lc(cellTxt(s.c,r)));
+  const K=R.map(r=>[key(r),r]); K.sort((a,b)=> a[0]<b[0]?-dir:a[0]>b[0]?dir:(a[1].t0-b[1].t0)); return K.map(x=>x[1]);
+}
+
+// ================= histogram =================
+function drawHist(F){
+  const el=$('#hist'), W=Math.max(300,el.clientWidth-32), H=74, top=4, bot=16, bins=Math.min(140,Math.max(30,Math.floor(W/8)));
+  const [from,to]=winBounds(), lo=S.tmin, hi=Math.max(S.tmax,S.tmin+60000), span=hi-lo, bw=span/bins;
+  const cnt=Array.from({length:bins},()=>({t:0}));
+  for(const r of F){ if(r.t0==null) continue; const b=Math.min(bins-1,Math.max(0,Math.floor((r.t0-lo)/bw))); cnt[b][r.sec]=(cnt[b][r.sec]||0)+1; cnt[b].t++; }
+  const max=Math.max(1,...cnt.map(c=>c.t)), bwpx=W/bins;
+  let s=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" id="hsvg">`;
+  if(from!=null||to!=null){ const a=Math.max(0,((from??lo)-lo)/span*W), b=Math.min(W,((to??hi)-lo)/span*W); s+=`<rect x="${a}" y="0" width="${Math.max(1,b-a)}" height="${H-bot}" fill="${css('--accent')}" opacity=".08"/>`; }
+  cnt.forEach((c,i)=>{ let y=H-bot; const th=Math.sqrt(c.t/max)*(H-bot-top); for(const k of FAMS){ if(!c[k]) continue; const h=Math.max(k==='alert'?2:1,th*c[k]/c.t); y-=h; s+=`<rect x="${i*bwpx+.5}" y="${y}" width="${Math.max(1,bwpx-1)}" height="${h}" fill="${FCOL[k]}"><title>${fmtT(lo+i*bw)} · ${k}: ${fmtN(c[k])}</title></rect>`; } });
+  { const fr=F.filter(r=>r.focus&&r.t0!=null); if(fr.length){ const a=(Math.min(...fr.map(r=>r.t0))-lo)/span*W, b=(Math.max(...fr.map(r=>r.t1??r.t0))-lo)/span*W; s+=`<rect x="${a}" y="0" width="${Math.max(3,b-a)}" height="${H-bot}" fill="none" stroke="${css('--accent')}" stroke-width="1.5" stroke-dasharray="3 2"><title>alert session</title></rect>`; } }
+  // alert ticks on top
+  const aw=W/span; for(const r of F){ if(r.sec==='alert'&&r.t0!=null){ const x=(r.t0-lo)*aw; s+=`<line x1="${x}" x2="${x}" y1="0" y2="5" stroke="${FCOL.alert}" stroke-width="2"/>`; } }
+  if(S.C.pivot && S.C.pivot>=lo && S.C.pivot<=hi){ const px=(S.C.pivot-lo)/span*W; s+=`<line x1="${px}" x2="${px}" y1="0" y2="${H-bot}" stroke="${css('--hi')}" stroke-width="2"/><text x="${px+3}" y="12" class="ax" style="fill:${css('--hi')}">alert time</text>`; }
+  s+=`<text x="0" y="${H-3}" class="ax">${fmtT(lo)}</text><text x="${W}" y="${H-3}" class="ax" text-anchor="end">${fmtT(hi)} (${TZ})</text>`;
+  s+=`<text x="${W/2}" y="${H-3}" class="ax" text-anchor="middle">${FAMS.filter(k=>cnt.some(c=>c[k])).map(k=>'■ '+k).join('  ')} · drag to set range · red ticks = alerts</text>`;
+  s+=`<rect id="brush" x="0" y="0" width="0" height="${H-bot}" fill="${css('--accent')}" opacity=".25"/></svg>`;
+  el.innerHTML=s;
+  const svg=$('#hsvg'), br=$('#brush'); let x0=null;
+  const px=ev=>{ const b=svg.getBoundingClientRect(); return Math.max(0,Math.min(W,(ev.clientX-b.left)/b.width*W)); };
+  svg.onmousedown=ev=>{ x0=px(ev); br.setAttribute('x',x0); br.setAttribute('width',0); };
+  svg.onmousemove=ev=>{ if(x0==null) return; const x1=px(ev); br.setAttribute('x',Math.min(x0,x1)); br.setAttribute('width',Math.abs(x1-x0)); };
+  window.onmouseup=()=>{ if(x0==null) return; const x1=+br.getAttribute('x')+ +br.getAttribute('width'), a=+br.getAttribute('x'); x0=null;
+    const ta=lo+a/W*span, tb=lo+(x1<a+3?a+W/bins:x1)/W*span; S.C.win=''; S.f.from=Math.floor(ta); S.f.to=Math.ceil(tb); syncInputs(); render(); };
+}
+
+// ================= grid =================
+function vGrid(id,base){
+  const t=TABM[id], g=grid(id), R0=tabRows(id,base);
+  const tool=`<div class="gbar"><b style="color:var(--ink)">${fmtN(R0.length)}</b> records
+    <label>Group by <select id="g-group"><option value="">none</option>${colsFor(id).filter(c=>!['time','flags','tag','what'].includes(c)).map(c=>`<option value="${c}" ${g.group===c?'selected':''}>${esc(CD[c].h)}</option>`).join('')}</select></label>
+    <button class="sm" id="g-cols">Columns…</button>
+    <label>Rows/page <select id="g-size">${[100,250,500,1000,2500].map(n=>`<option ${g.size===n?'selected':''}>${n}</option>`).join('')}</select></label>
+    <button class="sm" id="g-csv">Export CSV</button><button class="sm" id="g-reset">Reset view</button>
+    ${Object.keys(g.cf).length?'<button class="sm" id="g-cfclear">Clear column filters</button>':''}
+    <span class="help" title="text = contains · a|b = either · !text = exclude · =text = exact · = empty · * = not empty · /regex/ · numbers: >1000, <=443 · bytes: >50mb · duration: >1h, >30s">filter syntax ⓘ</span></div>`;
+  if(g.group) return tool+vGroups(id,R0);
+  const R=sortRows(R0,g.sort), pages=Math.max(1,Math.ceil(R.length/g.size)); if(g.page>=pages) g.page=pages-1;
+  const view=R.slice(g.page*g.size,(g.page+1)*g.size);
+  let pivotIdx=-1; if(S.C.pivot&&g.sort.c==='time') pivotIdx=view.findIndex(r=>g.sort.d>0?r.t0>=S.C.pivot:r.t0<=S.C.pivot);
+  const pager=`<div class="pager">${pages>1?`page ${g.page+1} / ${pages} <button class="sm" data-pg="-1">‹ Prev</button><button class="sm" data-pg="1">Next ›</button>`:''}${S.C.pivot&&g.sort.c==='time'?' <button class="sm" id="t-jump">Jump to alert time</button>':''}</div>`;
+  const isN=c=>CD[c].num&&c!=='time';
+  const head='<tr>'+g.cols.map(c=>`<th class="${isN(c)?'n':''}"><span class="sh" data-sort="${c}">${esc(CD[c].h)}${g.sort.c===c?`<span class="ar">${g.sort.d>0?'▲':'▼'}</span>`:''}</span></th>`).join('')+'</tr>'
+    +'<tr class="fr">'+g.cols.map(c=>`<th><input data-cf="${c}" value="${esc(g.cf[c]||'')}" class="${g.cf[c]?'on':''}" placeholder="filter"></th>`).join('')+'</tr>';
+  const cell=(c,r)=>{ const d=CD[c]; if(d.html) return d.html(r); const v=cellTxt(c,r); if(v==='') return ''; let s=esc(trunc(v,/wrap/.test(d.c||'')?400:200)); if((c==='src'&&r.sx)||(c==='dst'&&r.dx)) s=`<span class="ext">${s}</span>`; return d.nolink?s:`<a class="cv" data-c="${c}">${s}</a>`; };
+  const body=view.map((r,i)=>`<tr data-i="${r.i}" class="${S.sel===r.i?'sel ':''}${i===pivotIdx?'pivot':''}" ${r.sec==='alert'?`style="box-shadow:inset 3px 0 0 ${FCOL.alert}"`:r.focus?`style="box-shadow:inset 3px 0 0 ${css('--accent')}"`:''}>`+g.cols.map(c=>`<td class="${(CD[c].c||'')+(isN(c)?' n':'')}">${cell(c,r)}</td>`).join('')+'</tr>').join('');
+  return tool+pager+`<div class="tw"><table><thead>${head}</thead><tbody>${body||`<tr><td colspan="${g.cols.length}" class="muted">Nothing matches.</td></tr>`}</tbody></table></div>`+(pages>1?pager:'');
+}
+function vGroups(id,R){
+  const g=grid(id), c=g.group, M=new Map();
+  for(const r of R){ const v=cellTxt(c,r); let a=M.get(v); if(!a){ a={v,rows:0,t0:r.t0,t1:r.t1,bytes:0,logs:new Map(),peers:new Map(),alerts:0,r}; M.set(v,a); }
+    a.rows++; if(r.t0<a.t0) a.t0=r.t0; if(r.t1>a.t1) a.t1=r.t1; if(r.path==='conn') a.bytes+=num(r.ob)+num(r.rb); a.logs.set(r.path,(a.logs.get(r.path)||0)+1);
+    const pr=r.src&&r.dst?`${r.src}→${r.dst}`:''; if(pr) a.peers.set(pr,(a.peers.get(pr)||0)+1); if(r.sec==='alert') a.alerts++; }
+  let G=[...M.values()]; const gs=g.gsort, key={v:a=>lc(a.v),rows:a=>a.rows,t0:a=>a.t0,t1:a=>a.t1,bytes:a=>a.bytes,alerts:a=>a.alerts}[gs.c]||(a=>a.rows);
+  G.sort((a,b)=>{ const x=key(a),y=key(b); return (x<y?-1:x>y?1:0)*gs.d; });
+  const pages=Math.max(1,Math.ceil(G.length/g.size)); if(g.page>=pages) g.page=pages-1; const view=G.slice(g.page*g.size,(g.page+1)*g.size);
+  const th=(k,l,n)=>`<th class="${n?'n':''}"><span class="sh" data-gsort="${k}">${l}${gs.c===k?`<span class="ar">${gs.d>0?'▲':'▼'}</span>`:''}</span></th>`;
+  const top=(m,n=3)=>[...m.entries()].sort((a,b)=>b[1]-a[1]).slice(0,n).map(x=>x[0]+(m.size>1?` (${x[1]})`:'')).join(', ')+(m.size>n?` +${m.size-n}`:'');
+  const isUid=c==='uid';
+  return `<div class="pager">${fmtN(G.length)} distinct ${esc(CD[c].h)} ${pages>1?`· page ${g.page+1}/${pages} <button class="sm" data-pg="-1">‹</button><button class="sm" data-pg="1">›</button>`:''} · <b>+</b> keep only · <b>−</b> exclude · click a value to ${isUid?'open the session':'see its rows'}</div>
+  <div class="tw"><table><thead><tr><th></th>${th('v',esc(CD[c].h))}${th('rows','Records',1)}${th('alerts','Alerts',1)}${th('t0','First')}${th('t1','Last')}${th('bytes','Conn bytes',1)}<th>Logs</th><th>Pairs</th></tr></thead><tbody>
+  ${view.map(a=>`<tr data-gv="${esc(a.v)}" ${a.alerts?`style="box-shadow:inset 3px 0 0 ${FCOL.alert}"`:''}><td style="white-space:nowrap"><button class="sm" data-gin="1">+</button> <button class="sm" data-gout="1">−</button></td><td class="wrap ${/mono/.test(CD[c].c||'')?'mono':''}"><b>${a.v===''?'<span class="muted">(empty)</span>':esc(trunc(a.v,300))}</b>${isUid?`<div class="muted">${esc(trunc(summ(a.r),160))}</div>`:''}</td><td class="n">${fmtN(a.rows)}</td><td class="n ${a.alerts?'bad':''}">${a.alerts||''}</td><td class="t">${fmtT(a.t0)}</td><td class="t">${fmtT(a.t1)}</td><td class="n">${a.bytes?fmtB(a.bytes):''}</td><td>${esc(top(a.logs,4))}</td><td>${esc(top(a.peers,2))}</td></tr>`).join('')||'<tr><td colspan="9" class="muted">Nothing matches.</td></tr>'}
+  </tbody></table></div>`;
+}
+
+// ================= overview =================
+function vOverview(F){
+  const agg=(pred,kf,wf)=>{ const m={}; for(const r of F){ if(!pred(r)) continue; const k=kf(r); if(k) m[k]=(m[k]||0)+(wf?wf(r):1); } return m; };
+  const bars=(o,col,tab,fmt=fmtN,lim=10)=>{ const e=Object.entries(o).sort((a,b)=>b[1]-a[1]).slice(0,lim), m=Math.max(1,...e.map(x=>x[1])); return `<div class="bars">${e.map(([n,c])=>`<div class="b" data-c="${col}" data-v="${esc(n)}" data-t="${tab}"><span class="l" title="${esc(n)}">${esc(n)}</span><span class="r">${fmt(c)}</span><span class="fill" style="width:${Math.max(2,c/m*100)}%"></span></div>`).join('')||'<span class="muted">none</span>'}</div>`; };
+  const cnt=id=>F.filter(TABM[id].pred).length, conn=r=>r.path==='conn', fset=new Set(F.map(r=>r.i));
+  const finds=RULES.map(x=>({x,n:S.hits[x.id].filter(r=>fset.has(r.i)).length})).filter(o=>o.n).sort((a,b)=>b.n-a.n);
+  return `<div class="stats">${[...(S.focus.size?['session']:[]),'all','alerts','sessions','conn','dns','http','tls','files','auth','smb'].map(id=>`<div class="stat" data-tab="${id}"><div class="v">${fmtN(id==='sessions'?new Set(F.filter(r=>r.uid).map(r=>r.uid)).size:cnt(id))}</div><div class="k">${TABM[id].l}</div></div>`).join('')}</div>
+  <div class="grid">
+    <div class="card"><h3>Case notes</h3><input type="text" id="c-title" placeholder="Alert / case title" value="${esc(S.C.title)}" style="width:100%;margin-bottom:6px"><textarea id="c-notes" placeholder="Signature, SID, involved hosts, hypothesis, next steps…">${esc(S.C.notes)}</textarea><div class="help" style="margin-top:4px">Saved as you type · included in the report.</div></div>
+    ${diagCard()}
+    <div class="card"><h3>Suricata signatures</h3>${bars(agg(r=>r.sec==='alert',r=>r.sig||('SID '+r.sid)),'sig','alerts')}</div>
+    <div class="card"><h3>Conversations by bytes (conn)</h3>${bars(agg(conn,r=>r.src+' → '+r.dst,r=>num(r.ob)+num(r.rb)),'_conv','conn',fmtB)}</div>
+    <div class="card"><h3>Destinations by connections</h3>${bars(agg(conn,r=>r.dst),'dst','conn')}</div>
+    <div class="card"><h3>Sources by connections</h3>${bars(agg(conn,r=>r.src),'src','conn')}</div>
+    <div class="card"><h3>Destination ports</h3>${bars(agg(conn,r=>(r.dport||'?')+'/'+(r.proto||'')+(r.svc?' '+r.svc:'')),'_port','conn')}</div>
+    <div class="card"><h3>Names (SNI / HTTP host / DNS query)</h3>${bars(agg(r=>!!hostOf(r),hostOf),'hostname','all')}</div>
+    <div class="card"><h3>Connection states</h3>${bars(agg(conn,r=>r.state?(r.state+' '+(STATES[r.state]||'')).trim():''),'_state','conn')}</div>
+    <div class="card"><h3>JA3 fingerprints</h3>${bars(agg(r=>r.path==='ssl',r=>r.ja3),'ja3','tls')}</div>
+    <div class="card"><h3>HTTP user agents</h3>${bars(agg(r=>r.path==='http',r=>r.ua),'ua','http')}</div>
+    <div class="card"><h3>File types</h3>${bars(agg(r=>r.path==='files',r=>r.f_mime),'f_mime','files')}</div>
+    <div class="card"><h3>Triage flags (optional lens)</h3>${finds.map(o=>`<div class="find" data-fl="${o.x.id}"><span class="sv ${o.x.sev}"></span><span>${esc(o.x.t)}</span><span class="c">${fmtN(o.n)}</span></div>`).join('')||'<span class="muted">none</span>'}</div>
+  </div>`;
+}
+
+function diagCard(){
+  const d=S.diag, issues=[];
+  if(d.bad) issues.push(`<div class="bad">${fmtN(d.bad)} of ${fmtN(d.rows)} rows have a different number of fields than the header (${d.delim}). Columns after the break will be shifted or blank.</div>`+d.samples.map(x=>`<div class="mono help">line ${x.line} (${esc(x.path)}): ${x.got} fields, header has ${x.want} · ${esc(trunc(x.head,120))}</div>`).join(''));
+  const key=['sig','sid','uid','src','dst','path','ts'].filter(c=>d.missing.includes(c));
+  if(key.length) issues.push(`<div class="bad">Header is missing: ${key.map(esc).join(', ')}</div>`);
+  if(d.alertsNoSig) issues.push(`<div class="bad">${fmtN(d.alertsNoSig)} of ${fmtN(d.alerts)} Suricata rows have no signature/SID in the file${d.missing.includes('sig')?' (no sig column in header)':' (sig column present but empty on those rows)'}.</div>`);
+  const other=d.missing.filter(c=>!key.includes(c));
+  return `<div class="card"><h3>Import check</h3>${issues.length?issues.join(''):'<div class="ok">Header and row shapes look right.</div>'}${other.length?`<details class="help" style="margin-top:6px"><summary>${other.length} optional columns not in file</summary>${esc(other.join(', '))}</details>`:''}<details class="help" style="margin-top:6px"><summary>Header as read (${d.header.length} columns)</summary><span class="mono">${esc(d.header.join(', '))}</span></details></div>`;
+}
+
+// ================= drawer =================
+const DRAWER_COLS = ['path','uid','cid','pcap','pcap_rule','pcap_trigger','src','sport','dst','dport','dir','proto','svc','dur','ob','rb','opk','rpk','state','statex','hist','query','qtype','rcode','ans','method','http_host','uri','ua','status','referrer','mime','req_len','resp_len','sni','tls_ver','cipher','ja3','ja3s','ssl_valid','ssl_subject','ssl_issuer','fuid','f_name','f_mime','f_bytes','f_source','md5','sha1','sha256','sig','sid','sig_cat','sig_sev','note','msg','notice_sub','weird_name','krb_type','krb_client','krb_service','ntlm_domain','ntlm_user','ntlm_host','ok','smb_action','smb_path','smb_name','rpc_endpoint','rpc_op','rdp_cookie','rdp_result','ssh_client','ssh_server','dhcp_name','dhcp_addr','mailfrom','rcptto','smtp_subject','ftp_cmd','ftp_arg'];
+function openDrawer(r){
+  S.sel=r.i; const t=S.C.tags[r.key]||{};
+  $('#dr-t').innerHTML=`<span class="sec" style="background:${FCOL[r.sec]}">${esc(r.path)}</span>${r.focus?' <span class="sec" style="background:'+css('--accent')+'">alert session</span>':''} ${esc(fmtT(r.t0))}`;
+  const sess=r.uid?(S.byUid.get(r.uid)||[]):[], files=r.uid?S.rows.filter(x=>x.path==='files'&&x.uid===r.uid&&!sess.includes(x)):[];
+  const piv=[['ip',r.src,'Source IP (either side)'],['ip',r.dst,'Dest IP (either side)'],['conv',r.src&&r.dst?r.src+'|'+r.dst:'','This conversation (both directions)'],['hostname',hostOf(r),'Same name'],['ja3',r.ja3,'Same JA3'],['hash',r.sha256||r.md5,'Same file hash'],['sid',r.sid,'Same SID'],['cid',r.cid,'Same Community ID']].filter(x=>x[1]);
+  const pl=pcapLink(r,'Download session PCAP');
+  $('#dr-b').innerHTML=`<div class="mono" style="margin-bottom:8px">${esc(summ(r))}</div>${pl?`<div style="margin-bottom:10px">${pl}${r._spcap?' <span class="help">(from this session\'s conn record)</span>':''}</div>`:''}${r.f.length?`<div style="margin-bottom:8px">${r.f.map(id=>`<span class="fb ${RMAP[id].sev}">${esc(RMAP[id].t)}</span>`).join('')}</div>`:''}
+    <div class="row tb"><button class="mal ${t.tag==='mal'?'on':''}" data-tag="mal">Malicious</button><button class="sus ${t.tag==='sus'?'on':''}" data-tag="sus">Suspicious</button><button class="ben ${t.tag==='ben'?'on':''}" data-tag="ben">Benign</button><button data-tag="">Clear tag</button></div>
+    <h4>Analyst note</h4><textarea id="dr-note" placeholder="What is this and why does it matter?">${esc(t.note||'')}</textarea>
+    <h4>Pivot</h4><div class="row">${piv.map(([k,v,l])=>`<button class="sm" data-pk="${k}" data-pv="${esc(v)}">${esc(l)}</button>`).join('')}<button class="sm" id="dr-ctx">±5 min around this</button><button class="sm" id="dr-piv">Set as alert time</button></div>
+    ${sess.length>1||files.length?`<h4>Session ${esc(r.uid)} · ${sess.length+files.length} records</h4><div class="tw" style="max-height:260px"><table><tbody>${[...sess,...files].sort((a,b)=>a.t0-b.t0).map(x=>`<tr data-si="${x.i}" class="${x.i===r.i?'sel':''}"><td class="t">${fmtT(x.t0).slice(11)}</td><td><span class="sec" style="background:${FCOL[x.sec]}">${esc(x.path.replace('suricata_corelight','suricata'))}</span></td><td class="wrap">${esc(trunc(summ(x),220))}</td></tr>`).join('')}</tbody></table></div>`:''}
+    <h4>Fields <span class="help" style="text-transform:none;letter-spacing:0">+ keep only · − exclude</span></h4>
+    <dl class="kv"><dt>Time</dt><dd>${esc(fmtT(r.t0))} ${TZ}</dd>${DRAWER_COLS.filter(c=>CD[c]).map(c=>[c,cellTxt(c,r)]).filter(x=>x[1]!=='').map(([c,v])=>`<dt>${esc(CD[c].h)}</dt><dd class="${/mono/.test(CD[c].c||'')?'mono':''}">${esc(v)} ${CD[c].nolink?'':`<button class="sm" data-inc="${c}">+</button><button class="sm" data-exc="${c}">−</button>`}</dd>`).join('')}</dl>`;
+  $('#drawer').classList.add('open');
+  const b=$('#dr-b');
+  const setTag=(tag,note)=>{ const cur={...(S.C.tags[r.key]||{})}; if(tag!==undefined){ if(tag) cur.tag=tag; else delete cur.tag; } if(note!==undefined) cur.note=note; if(cur.tag||(cur.note&&cur.note.trim())){ cur.t=r.t0; cur.s=summ(r).slice(0,300); S.C.tags[r.key]=cur; } else delete S.C.tags[r.key]; saveCase(); };
+  b.querySelectorAll('[data-tag]').forEach(x=>x.onclick=()=>{ setTag(x.dataset.tag); openDrawer(r); renderBody(); });
+  $('#dr-note').oninput=()=>setTag(undefined,$('#dr-note').value); $('#dr-note').onblur=()=>renderBody();
+  b.querySelectorAll('[data-pk]').forEach(x=>x.onclick=()=>{ if(S.tab==='overview'||S.tab==='tagged') S.tab='all'; addChip(x.dataset.pk,x.dataset.pv); });
+  b.querySelectorAll('[data-inc],[data-exc]').forEach(x=>x.onclick=()=>{ const c=x.dataset.inc||x.dataset.exc; if(S.tab==='overview'||S.tab==='tagged') S.tab='all'; addChip(c,cellTxt(c,r),!!x.dataset.exc); });
+  b.querySelectorAll('tr[data-si]').forEach(tr=>tr.onclick=()=>openDrawer(S.rows[+tr.dataset.si]));
+  $('#dr-ctx').onclick=()=>{ S.C.win=''; S.f.from=r.t0-300000; S.f.to=(r.t1??r.t0)+300000; S.f.chips=[]; Object.values(S.G).forEach(g=>{ g.cf={}; g.group=TABM[Object.keys(S.G).find(k=>S.G[k]===g)]?.group||''; }); syncInputs(); setTab('all'); };
+  $('#dr-piv').onclick=()=>{ S.C.pivot=r.t0; saveCase(); syncInputs(); render(); };
+  document.querySelectorAll('#main tr.sel').forEach(x=>x.classList.remove('sel')); document.querySelectorAll(`#main tr[data-i="${r.i}"]`).forEach(x=>x.classList.add('sel'));
+}
+function closeDrawer(){ $('#drawer').classList.remove('open'); S.sel=null; document.querySelectorAll('#main tr.sel').forEach(x=>x.classList.remove('sel')); }
+
+// ================= popovers =================
+function hidePops(){ $('#pop').classList.add('hidden'); $('#colpick').classList.add('hidden'); }
+function showPop(ev,c,r){
+  const v=cellTxt(c,r), p=$('#pop'), ipc=(c==='src'||c==='dst');
+  p.innerHTML=`<div class="pv0"><b>${esc(CD[c].h)}</b>: ${esc(trunc(v,200))}</div>
+    <button data-a="in">Keep only this value</button><button data-a="out">Exclude this value</button>
+    ${ipc?'<button data-a="ip">This IP on either side</button>':''}${r.uid?'<button data-a="sess">Open this session</button>':''}
+    <button data-a="cf">Filter this column: contains…</button><button data-a="grp">Group by ${esc(CD[c].h)}</button><button data-a="copy">Copy value</button>`;
+  p.classList.remove('hidden'); const W=p.offsetWidth, H=p.offsetHeight;
+  p.style.left=Math.min(ev.clientX,innerWidth-W-8)+'px'; p.style.top=Math.min(ev.clientY+8,innerHeight-H-8)+'px';
+  p.onclick=e=>{ const a=e.target.dataset.a; if(!a) return; hidePops(); const g=grid(S.tab);
+    if(a==='in') addChip(c,v); else if(a==='out') addChip(c,v,true); else if(a==='ip') addChip('ip',v);
+    else if(a==='sess') openDrawer(r);
+    else if(a==='cf'){ g.cf[c]=v.length>80?v.slice(0,80):v; g.page=0; renderBody(); }
+    else if(a==='grp'){ g.group=c; g.page=0; renderBody(); }
+    else if(a==='copy') navigator.clipboard?.writeText(v).then(()=>alertMsg('Copied'),()=>alertMsg('Copy blocked by browser')); };
+}
+function showCols(btn){
+  const g=grid(S.tab), cp=$('#colpick'), all=colsFor(S.tab);
+  cp.innerHTML=all.map(c=>`<label><input type="checkbox" data-col="${c}" ${g.cols.includes(c)?'checked':''}> ${esc(CD[c].h)}</label>`).join('');
+  cp.classList.remove('hidden'); const b=btn.getBoundingClientRect(); cp.style.left=Math.min(b.left,innerWidth-cp.offsetWidth-8)+'px'; cp.style.top=(b.bottom+4)+'px';
+  cp.onchange=e=>{ const c=e.target.dataset.col; if(!c) return; if(e.target.checked){ if(!g.cols.includes(c)) g.cols=[...g.cols,c]; } else g.cols=g.cols.filter(x=>x!==c); saveGrid(S.tab); renderBody(); showCols($('#g-cols')); };
+}
+
+// ================= report / csv =================
+function report(){
+  const R=S.rows.filter(r=>S.C.tags[r.key]).sort((a,b)=>a.t0-b.t0), L={mal:'MALICIOUS',sus:'SUSPICIOUS',ben:'BENIGN'};
+  let md=`# ${S.C.title||'Network alert investigation'}\n\n- Hosts of interest: ${S.ips.slice(0,10).join(', ')}\n- Data window: ${fmtT(S.tmin)} to ${fmtT(S.tmax)} (${TZ})\n`+(S.C.pivot?`- Alert time: ${fmtT(S.C.pivot)} (${TZ})\n`:'')+`- Export: ${S.src}\n- Generated: ${fmtT(Date.now())} (${TZ})\n\n`;
+  if(S.C.notes.trim()) md+=`## Notes\n\n${S.C.notes.trim()}\n\n`;
+  if(S.focus.size){ const F=S.rows.filter(r=>r.focus); const pu=[...new Set(F.map(pcapOf).filter(Boolean))]; md+=`## Alert session ${[...S.focus].join(', ')} (${F.length} records)\n\n${pu.length?'PCAP: '+pu.map(u=>'<'+u+'>').join(' , ')+'\n\n':''}| Time | Log | Record |\n|---|---|---|\n`+F.map(r=>`| ${fmtT(r.t0)} | ${r.path} | \`${String(trunc(summ(r),300)).replace(/\|/g,'\\|')}\` |`).join('\n')+'\n\n'; }
+  const sigs={}; S.rows.filter(r=>r.sec==='alert').forEach(r=>{ const k=(r.sig||'?')+(r.sid?' ['+r.sid+']':''); sigs[k]=(sigs[k]||0)+1; });
+  md+=`## Suricata signatures in the export\n\n${Object.entries(sigs).sort((a,b)=>b[1]-a[1]).map(([k,n])=>`- ${k}: ${n}`).join('\n')||'- none'}\n\n`;
+  const cell=s=>String(s||'').replace(/\|/g,'\\|').replace(/\r?\n/g,' ');
+  md+=`## Tagged records (${R.length})\n\n| Time | Tag | Log | uid | Activity | Note |\n|---|---|---|---|---|---|\n`;
+  R.forEach(r=>{ const t=S.C.tags[r.key]; md+=`| ${fmtT(r.t0)} | ${L[t.tag]||''} | ${r.path} | ${r.uid||''} | \`${cell(trunc(summ(r),300))}\` | ${cell(t.note)} |\n`; });
+  const io={ip:new Set(),name:new Set(),url:new Set(),ja3:new Set(),hash:new Set()};
+  R.filter(r=>['mal','sus'].includes(S.C.tags[r.key].tag)).forEach(r=>{ if(r.sx) io.ip.add(r.src); if(r.dx) io.ip.add(r.dst); if(hostOf(r)) io.name.add(hostOf(r)); if(r.path==='http') io.url.add(url(r)); if(r.ja3) io.ja3.add(r.ja3); [r.sha256,r.sha1,r.md5].filter(Boolean).forEach(h=>io.hash.add(h)); });
+  { const pu=[...new Set(R.map(pcapOf).filter(Boolean))]; if(pu.length) md+=`\n## PCAP for tagged records\n\n${pu.map(u=>'- <'+u+'>').join('\n')}\n`; }
+  md+=`\n## Indicators (from malicious/suspicious tags)\n\n`; for(const [k,v] of Object.entries(io)) if(v.size) md+=`**${k}**\n\n${[...v].map(x=>'- `'+x+'`').join('\n')}\n\n`;
+  download(`nsm-report-${new Date().toISOString().slice(0,10)}.md`,md,'text/markdown');
+}
+function toCSV(R,cols){ const q=v=>{ v=String(v??''); return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }; return cols.map(c=>q(CD[c].h)).join(',')+'\n'+R.map(r=>cols.map(c=>q(cellTxt(c,r))).join(',')).join('\n'); }
+
+// ================= render =================
+let BASE=[];
+function setTab(t){ S.tab=t; if(S.G[t]) S.G[t].page=0; hidePops(); render(); window.scrollTo(0,0); }
+function render(){ BASE=globalFiltered(); drawHist(BASE); renderTabs(); renderChips(); renderBody(); }
+function renderTabs(){ $('#tabs').innerHTML=TABS.map(t=>`<button data-tab="${t.id}" class="${S.tab===t.id?'on':''}">${t.l}${t.pred?`<span class="ct">${fmtN((t.all?S.rows:BASE).filter(t.pred).length)}</span>`:''}</button>`).join(''); }
+function renderChips(){
+  const c=S.f.chips.map((x,i)=>`<span class="chip ${x.neg?'neg':''}"><b>${esc(CHIPN(x.c))}${x.neg?' ≠':''}</b> ${esc(trunc(x.v.replace('|',' ↔ '),56))}<button data-x="${i}">×</button><button data-flip="${i}" title="Flip include/exclude">⇄</button></span>`);
+  if(S.C.pivot&&+S.C.win) c.push(`<span class="chip"><b>window</b> alert ±${S.C.win>=60?S.C.win/60+'h':S.C.win+'m'}<button data-x="win">×</button></span>`);
+  $('#chips').innerHTML=c.join('');
+}
+function renderBody(){
+  const ae=document.activeElement, keep=ae&&ae.dataset&&ae.dataset.cf?{c:ae.dataset.cf,s:ae.selectionStart}:null;
+  $('#main').innerHTML = S.tab==='overview' ? vOverview(BASE) : vGrid(S.tab,BASE);
+  wireBody();
+  if(keep){ const el=document.querySelector(`input[data-cf="${keep.c}"]`); if(el){ el.focus(); try{ el.setSelectionRange(keep.s,keep.s); }catch(e){} } }
+}
+let cfTimer;
+function wireBody(){
+  const m=$('#main'), g=S.tab!=='overview'?grid(S.tab):null;
+  m.querySelectorAll('tbody tr[data-i]').forEach(tr=>tr.onclick=ev=>{ if(ev.target.closest('a,button,input')) return; openDrawer(S.rows[+tr.dataset.i]); });
+  m.querySelectorAll('a.cv').forEach(a=>a.onclick=ev=>{ ev.stopPropagation(); ev.preventDefault(); showPop(ev,a.dataset.c,S.rows[+a.closest('tr').dataset.i]); });
+  m.querySelectorAll('[data-pg]').forEach(b=>b.onclick=()=>{ g.page=Math.max(0,g.page+ +b.dataset.pg); renderBody(); window.scrollTo(0,0); });
+  m.querySelectorAll('[data-sort]').forEach(x=>x.onclick=()=>{ const c=x.dataset.sort; g.sort = g.sort.c===c ? {c,d:-g.sort.d} : {c,d:(c==='time'||!CD[c].num)?1:-1}; g.page=0; saveGrid(S.tab); renderBody(); });
+  m.querySelectorAll('[data-gsort]').forEach(x=>x.onclick=()=>{ const c=x.dataset.gsort; g.gsort = g.gsort.c===c ? {c,d:-g.gsort.d} : {c,d:c==='v'||c==='t0'?1:-1}; renderBody(); });
+  m.querySelectorAll('input[data-cf]').forEach(inp=>{ inp.oninput=()=>{ clearTimeout(cfTimer); cfTimer=setTimeout(()=>{ const v=inp.value; if(v.trim()) g.cf[inp.dataset.cf]=v; else delete g.cf[inp.dataset.cf]; g.page=0; renderBody(); },250); }; });
+  m.querySelectorAll('tr[data-gv]').forEach(tr=>{ const v=tr.dataset.gv;
+    tr.querySelector('[data-gin]').onclick=ev=>{ ev.stopPropagation(); addChip(g.group,v); };
+    tr.querySelector('[data-gout]').onclick=ev=>{ ev.stopPropagation(); addChip(g.group,v,true); };
+    tr.onclick=ev=>{ if(ev.target.closest('button')) return; if(g.group==='uid'){ const rs=S.byUid.get(v)||[]; const first=rs.find(x=>x.sec==='alert')||rs[0]; if(first){ openDrawer(first); return; } } const c=g.group; g.group=''; addChip(c,v); }; });
+  if($('#g-group')) $('#g-group').onchange=()=>{ g.group=$('#g-group').value; g.page=0; renderBody(); };
+  if($('#g-size')) $('#g-size').onchange=()=>{ g.size=+$('#g-size').value; g.page=0; saveGrid(S.tab); renderBody(); };
+  if($('#g-cols')) $('#g-cols').onclick=ev=>{ ev.stopPropagation(); showCols(ev.currentTarget); };
+  if($('#g-reset')) $('#g-reset').onclick=()=>{ const t=TABM[S.tab]; Object.assign(g,{cols:[...t.cols],sort:{c:'time',d:1},cf:{},group:t.group||'',page:0,size:250}); saveGrid(S.tab); renderBody(); };
+  if($('#g-cfclear')) $('#g-cfclear').onclick=()=>{ g.cf={}; g.page=0; renderBody(); };
+  if($('#g-csv')) $('#g-csv').onclick=()=>download(`nsm-${S.tab}.csv`,toCSV(sortRows(tabRows(S.tab,BASE),g.sort),g.cols),'text/csv');
+  if($('#t-jump')) $('#t-jump').onclick=()=>{ const R=sortRows(tabRows(S.tab,BASE),g.sort); const idx=R.findIndex(r=>g.sort.d>0?r.t0>=S.C.pivot:r.t0<=S.C.pivot); if(idx>=0){ g.page=Math.floor(idx/g.size); renderBody(); setTimeout(()=>{ const el=document.querySelector('tr.pivot'); if(el) el.scrollIntoView({block:'center'}); },30); } };
+  m.querySelectorAll('.stat[data-tab]').forEach(x=>x.onclick=()=>setTab(x.dataset.tab));
+  m.querySelectorAll('.find[data-fl]').forEach(x=>x.onclick=()=>{ grid('all').cf.flags=x.dataset.fl; setTab('all'); });
+  m.querySelectorAll('.bars .b').forEach(x=>x.onclick=()=>{ const c=x.dataset.c, v=x.dataset.v, t=x.dataset.t;
+    if(c==='_conv'){ const [a,b]=v.split(' → '); S.tab=t; addChip('conv',a+'|'+b); return; }
+    if(c==='_port'){ grid('conn').cf.dport='='+v.split('/')[0]; setTab('conn'); return; }
+    if(c==='_state'){ grid('conn').cf.state='='+v.split(' ')[0]; setTab('conn'); return; }
+    if(c==='sig'&&v.startsWith('SID ')){ S.tab=t; addChip('sid',v.slice(4)); return; }
+    S.tab=t; addChip(c,v); });
+  if($('#c-notes')){ $('#c-notes').oninput=()=>{ S.C.notes=$('#c-notes').value; saveCase(); }; $('#c-title').oninput=()=>{ S.C.title=$('#c-title').value; saveCase(); document.title='NSM · '+(S.C.title||'alert'); }; }
+  if(S.tab==='tagged'){ const gb=m.querySelector('.gbar'); gb.insertAdjacentHTML('beforeend','<button class="sm" id="t-rep">Export report (.md)</button><button class="sm" id="t-imp">Import case .json</button><input type="file" id="t-impf" accept=".json" hidden>');
+    $('#t-rep').onclick=report; $('#t-imp').onclick=()=>$('#t-impf').click();
+    $('#t-impf').onchange=()=>{ const f=$('#t-impf').files[0]; if(f) f.text().then(t=>{ try{ S.C=mergeCase(JSON.parse(t)); saveCase(); syncInputs(); render(); }catch(e){ alertMsg('Bad case file: '+e.message); } }); }; }
+}
+
+// ================= controls =================
+function syncInputs(){ $('#f-from').value=toLocalInput(S.f.from); $('#f-to').value=toLocalInput(S.f.to); $('#f-pivot').value=toLocalInput(S.C.pivot); $('#f-win').value=S.C.win||''; $('#f-ip').value=S.f.ip; $('#f-log').value=S.f.log; ['ext','flagged','tagged','alertsess'].forEach(k=>$('#f-'+k).checked=S.f[k]); }
+function wireControls(){
+  $('#q').onkeydown=ev=>{ if(ev.key==='Enter'){ S.f.q=$('#q').value; render(); } };
+  $('#q').oninput=()=>{ if(!$('#q').value&&S.f.q){ S.f.q=''; render(); } };
+  $('#f-ip').onchange=()=>{ S.f.ip=$('#f-ip').value; render(); };
+  $('#f-log').onchange=()=>{ S.f.log=$('#f-log').value; render(); };
+  $('#f-from').onchange=()=>{ S.f.from=fromLocalInput($('#f-from').value); S.C.win=''; $('#f-win').value=''; render(); };
+  $('#f-to').onchange=()=>{ S.f.to=fromLocalInput($('#f-to').value); S.C.win=''; $('#f-win').value=''; render(); };
+  $('#f-pivot').onchange=()=>{ S.C.pivot=fromLocalInput($('#f-pivot').value); saveCase(); render(); };
+  $('#f-win').onchange=()=>{ S.C.win=$('#f-win').value; if(S.C.win&&!S.C.pivot){ alertMsg('Set the alert time first'); S.C.win=''; $('#f-win').value=''; return; } saveCase(); render(); };
+  ['ext','flagged','tagged','alertsess'].forEach(k=>$('#f-'+k).onchange=()=>{ S.f[k]=$('#f-'+k).checked; render(); });
+  $('#f-clear').onclick=()=>{ S.f={q:'',ip:'',log:'',from:null,to:null,chips:[],ext:false,flagged:false,tagged:false,alertsess:false}; S.C.win=''; $('#q').value=''; Object.values(S.G).forEach(g=>{ g.cf={}; g.page=0; }); syncInputs(); render(); };
+  $('#chips').onclick=ev=>{ const x=ev.target.dataset.x, fl=ev.target.dataset.flip; if(fl!=null){ const c=S.f.chips[+fl]; c.neg=!c.neg; render(); return; } if(x==null) return; if(x==='win'){ S.C.win=''; saveCase(); } else S.f.chips.splice(+x,1); render(); };
+  $('#tabs').onclick=ev=>{ const b=ev.target.closest('button[data-tab]'); if(b) setTab(b.dataset.tab); };
+  $('#dr-x').onclick=closeDrawer;
+  document.addEventListener('keydown',ev=>{ if(ev.key==='Escape'){ closeDrawer(); hidePops(); } });
+  document.addEventListener('click',ev=>{ if(!ev.target.closest('#pop,#colpick,#g-cols,a.cv')) hidePops(); });
+  $('#b-report').onclick=report;
+  $('#b-case').onclick=()=>{ download(`nsm-case-${new Date().toISOString().slice(0,10)}.json`,JSON.stringify(S.C,null,2),'application/json'); dirty=false; caseStatus(); };
+  window.addEventListener('resize',()=>{ clearTimeout(window.__rz); window.__rz=setTimeout(()=>drawHist(BASE),150); });
+}
+
+// ================= load =================
+function start(rows,src,caseFromFile){
+  rows.forEach(r=>{ r.key=rowKey(r); });
+  { const seen=new Set(); rows=rows.filter(r=>{ if(seen.has(r.key)) return false; seen.add(r.key); return true; }); }
+  rows.sort((a,b)=>(a.t0??0)-(b.t0??0)); rows.forEach((r,i)=>{ r.i=i; });
+  S.rows=rows; S.src=src;
+  S.byUid=new Map(); S.alertUids=new Set(); rows.forEach(r=>{ if(r.uid){ if(!S.byUid.has(r.uid)) S.byUid.set(r.uid,[]); S.byUid.get(r.uid).push(r); if(r.sec==='alert'||r.sec==='notice'||r.focus) S.alertUids.add(r.uid); if(r.focus) S.focus.add(r.uid); } });
+  S.byUid.forEach(list=>{ const c=list.find(x=>x.pcap_url); if(c) list.forEach(x=>{ if(!x.pcap_url){ x._spcap=c.pcap_url; x._spcap_rule=c.pcap_rule; x._spcap_trig=c.pcap_trigger; } }); });
+  S.npcap=rows.filter(r=>r.pcap_url).length;
+  { const al=rows.filter(r=>r.sec==='alert'); S.diag.alerts=al.length; S.diag.alertsNoSig=al.filter(r=>!r.sig&&!r.sid).length; }
+  console.info('[nsm import]',JSON.stringify(S.diag));
+  const ic={}; rows.forEach(r=>{ if(r.src) ic[r.src]=(ic[r.src]||0)+1; if(r.dst) ic[r.dst]=(ic[r.dst]||0)+1; });
+  S.ips=Object.entries(ic).sort((a,b)=>b[1]-a[1]).map(x=>x[0]);
+  let lo=Infinity, hi=-Infinity; for(const r of rows){ if(r.t0!=null&&r.t0<lo) lo=r.t0; const e=r.t1??r.t0; if(e!=null&&e>hi) hi=e; } S.tmin=lo; S.tmax=hi;
+  S.hits=runFindings(rows);
+  S.caseKey='nsm-case:'+(S.focus.size?[...S.focus].sort().join(','):S.ips.slice(0,3).join(',')+':'+Math.floor(S.tmin/3600000));
+  S.C=mergeCase(caseFromFile||LS.get(S.caseKey,null)||{}); if(caseFromFile){ saveCase(); dirty=false; }
+  $('#f-ip').innerHTML='<option value="">all</option>'+S.ips.slice(0,400).map(h=>`<option>${esc(h)}</option>`).join('');
+  const logs=[...new Set(rows.map(r=>r.path))].sort(); $('#f-log').innerHTML='<option value="">all</option>'+logs.map(l=>`<option>${esc(l)}</option>`).join('');
+  ['#bar','#hist','#tabs','#b-report','#b-case','#b-load'].forEach(s=>$(s).classList.remove('hidden'));
+  const na=rows.filter(r=>r.sec==='alert').length;
+  $('#ttl').textContent='NSM Workbench';
+  if(S.diag.bad||S.diag.alertsNoSig) setTimeout(()=>alertMsg('Import check found problems: see Overview'),50);
+  $('#meta').textContent=`${S.focus.size?'uid '+[...S.focus].join(', ')+' · ':''}${fmtN(rows.length)} records · ${fmtN(S.byUid.size)} sessions · ${fmtN(na)} alerts · ${fmtN(S.npcap)} with PCAP · ${fmtT(S.tmin)} → ${fmtT(S.tmax)} ${TZ} · ${src}`;
+  document.title='NSM · '+(S.C.title||'alert');
+  if(S.focus.size) S.tab='session'; else if(na) S.tab='alerts';
+  if(S.focus.size && !S.C.pivot){ const fa=rows.find(r=>r.focus&&r.sec==='alert')||rows.find(r=>r.focus); if(fa) S.C.pivot=fa.t0; }
+  wireControls(); syncInputs(); caseStatus(); render();
+  const stick=()=>{ $('#bar').style.top=document.querySelector('header').offsetHeight+'px'; }; stick(); window.addEventListener('resize',stick);
+}
+function go(files){
+  const msg=$('#dropmsg'); files=[...files]; msg.textContent='Reading '+files.map(f=>f.name).join(', ')+'…';
+  Promise.all(files.map(f=>f.text().then(t=>({f,t})))).then(list=>{
+    let caseObj=null; const data=[];
+    for(const {f,t} of list){ if(/\.json$/i.test(f.name)||/^\s*\{/.test(t)){ try{ caseObj=JSON.parse(t); }catch(e){ msg.textContent='Could not parse '+f.name; return; } } else data.push({f,t}); }
+    if(!data.length){ msg.textContent='Add the CSV/TSV export too.'; return; }
+    msg.textContent='Parsing…';
+    setTimeout(()=>{ let rows=[]; try{ for(const {t} of data){ for(const r of toRows(parseDelim(t))) rows.push(r); } }catch(e){ msg.textContent=e.message; return; }
+      if(!rows.length){ msg.textContent='No rows found.'; return; }
+      $('#drop').remove(); start(rows,data.map(d=>d.f.name).join(', '),caseObj); },20);
+  });
+}
+const dz=$('#drop'), fi=$('#file');
+fi.onchange=()=>fi.files.length&&go(fi.files);
+['dragenter','dragover'].forEach(e=>dz.addEventListener(e,ev=>{ev.preventDefault();dz.classList.add('over');}));
+['dragleave','drop'].forEach(e=>dz.addEventListener(e,ev=>{ev.preventDefault();dz.classList.remove('over');}));
+dz.addEventListener('drop',ev=>{ if(ev.dataTransfer.files.length) go(ev.dataTransfer.files); });
+$('#b-theme').onclick=()=>{ const r=document.documentElement, dark=r.dataset.theme?r.dataset.theme==='dark':matchMedia('(prefers-color-scheme: dark)').matches; r.dataset.theme=dark?'light':'dark'; if(S.rows.length) drawHist(BASE); };
+window.__S=S;
+
+})();
+</script>
+</body>
+</html>
