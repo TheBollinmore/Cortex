@@ -1,0 +1,48 @@
+config case_sensitive = false timeframe = 30d
+| dataset = xdr_data
+| filter event_type = ENUM.LOAD_IMAGE and event_sub_type = ENUM.LOAD_IMAGE_MODULE
+| filter agent_os_type = ENUM.AGENT_OS_WINDOWS
+| filter action_module_path != null and actor_process_image_name != null
+| alter proc = lowercase(actor_process_image_name)
+| alter mp = lowercase(action_module_path)
+| alter mdir = replex(mp, ".[[:alnum:]_.$~%()+,'!#&@ -]+$", "")
+| alter mdir = replex(mdir, "^[a-z]:", "")
+| alter mdir = replex(mdir, ".driverstore.filerepository..*$", "<driverstore>")
+| alter mdir = replex(mdir, "_[[:xdigit:]]{16}_.*$", "")
+| alter mdir = replex(mdir, "_[[:xdigit:]]{16}$", "")
+| alter mdir = replex(mdir, "^.users.[[:alnum:]_. -]+", "<userprofile>")
+| alter mdir = replex(mdir, "^.documents and settings.[[:alnum:]_. -]+", "<userprofile>")
+| alter mdir = replex(mdir, ".[[:alnum:]_-]+[.]tmp.*$", "<tmpdir>")
+| alter mdir = replex(mdir, ".temp..*$", "<temp>")
+| alter mdir = replex(mdir, ".temp$", "<temp>")
+| alter mdir = replex(mdir, "[[:digit:]]+[.][[:digit:]]+[.][[:digit:]]+[.][[:digit:]]+", "<ver>")
+| alter mdir = replex(mdir, "[[:digit:]]+[.][[:digit:]]+[.][[:digit:]]+", "<ver>")
+| alter mdir = replex(mdir, "<ver>_[[:digit:]]+", "<ver>")
+| alter mdir = replex(mdir, "[[:xdigit:]]{8}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{12}", "<uuid>")
+| alter mdir = replex(mdir, "[[:xdigit:]]{32,}", "<hex>")
+| alter mdir = replex(mdir, "[[:digit:]]{5,}", "<num>")
+| filter mdir contains "<userprofile>" or mdir contains "<temp>"
+     or mdir contains "<tmpdir>" or mdir contains "programdata"
+     or mdir contains "public"
+| filter mdir not contains "windows defender"
+| comp count(action_module_path) as n_ab,
+       count_distinct(agent_hostname) as hosts,
+       count_distinct(action_module_sha256) as hashes
+     by mdir, proc
+| alter scope_all = 1
+| windowcomp sum(n_ab) by mdir      as n_a
+| windowcomp sum(n_ab) by proc      as n_b
+| windowcomp sum(n_ab) by scope_all as n_total
+| alter f_ab = to_float(n_ab)
+| alter f_a  = to_float(n_a)
+| alter f_b  = to_float(n_b)
+| alter f_n  = to_float(n_total)
+| alter p_a_given_b = divide(f_ab, f_b)
+| alter p_b_given_a = divide(f_ab, f_a)
+| alter lift_ab     = divide(multiply(f_ab, f_n), multiply(f_a, f_b))
+| filter n_b >= 1000
+| filter n_ab <= 5
+| fields proc, mdir, n_ab, n_a, n_b, hosts, hashes,
+         p_a_given_b, p_b_given_a, lift_ab
+| sort desc n_b
+| limit 200
