@@ -1,0 +1,16 @@
+// Sysmon config tuning candidates — top (event_id, image, detail) combos by volume
+// detail = TargetObject | ImageLoaded | TargetFilename(dir only) | QueryName | TargetImage | PipeName | DestinationPort | ParentImage
+dataset = microsoft_sysmon_raw
+| alter image = lowercase(coalesce(json_extract_scalar(event_data, "$.Image"), json_extract_scalar(event_data, "$.SourceImage"), json_extract_scalar(event_data, "$.ProcessName"), "-"))
+| alter detail_raw = lowercase(coalesce(json_extract_scalar(event_data, "$.TargetObject"), json_extract_scalar(event_data, "$.ImageLoaded"), json_extract_scalar(event_data, "$.TargetFilename"), json_extract_scalar(event_data, "$.QueryName"), json_extract_scalar(event_data, "$.TargetImage"), json_extract_scalar(event_data, "$.PipeName"), json_extract_scalar(event_data, "$.DestinationPort"), json_extract_scalar(event_data, "$.ParentImage"), "-"))
+| alter detail = replex(replex(replex(detail_raw, "s-1-5-21-\d+-\d+-\d+-\d+", "<sid>"), "\\users\\[^\\]+", "\\users\\<user>"), "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", "<guid>")
+| alter detail = if(event_id in (11, 15, 23, 26, 29), coalesce(arrayindex(regextract(detail, "^(.*\\)"), 0), detail), detail)
+| comp count() as hits, count_distinct(host_name) as hosts by event_id, image, detail
+| join type=inner (dataset = microsoft_sysmon_raw | comp count() as event_total by event_id) as e e.event_id = event_id
+| alter k = 1
+| join type=inner (dataset = microsoft_sysmon_raw | comp count() as grand_total | alter k = 1) as g g.k = k
+| alter pct_of_event = divide(round(multiply(divide(hits, event_total), 1000)), 10), pct_of_total = divide(round(multiply(divide(hits, grand_total), 10000)), 100), hits_per_host = round(divide(hits, hosts))
+| alter flag = if(pct_of_event >= 10, "dominates event_id", if(hosts = 1 and hits >= 500, "single-host noise", if(hits_per_host >= 1000, "high per-host rate", "")))
+| fields event_id, image, detail, hits, hosts, hits_per_host, pct_of_event, pct_of_total, event_total, flag
+| sort desc hits
+| limit 300
