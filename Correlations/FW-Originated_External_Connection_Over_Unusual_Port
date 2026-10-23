@@ -1,0 +1,7 @@
+dataset = corelight_zeek_raw
+| filter _path = "conn" and id_orig_h in ("","") //Fill in internal Firewall IPs
+    and not incidr(id_resp_h, "10.0.0.0/8") and not incidr(id_resp_h, "192.168.0.0/16")
+    and not incidr(id_resp_h, "172.16.0.0/12") and not incidr(id_resp_h, "224.0.0.0/4")
+    and id_resp_h != "255.255.255.255"
+    and id_resp_p not in (80, 443, 123) //Create a baseline of expected ports like http, https, and NTP
+| fields _time, id_orig_h, id_resp_h, id_resp_p, proto, service, conn_state, history, resp_ip_bytes, resp_pkts, duration
