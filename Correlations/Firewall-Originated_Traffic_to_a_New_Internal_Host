@@ -1,0 +1,5 @@
+dataset = corelight_zeek_raw
+| filter _path = "conn" and id_orig_h in ("","") // Fill in Internal Firewall IPs
+    and (incidr(id_resp_h, "10.0.0.0/8") or incidr(id_resp_h, "192.168.0.0/16") or incidr(id_resp_h, "172.16.0.0/12"))
+    and id_resp_h not in ("","") // Fill in expected communcation endpoints like DCs, TACAS, Mail relay, etc. 
+| fields _time, id_orig_h, id_orig_p, id_resp_h, id_resp_p, uid, proto, service, conn_state, history, duration, resp_ip_bytes, resp_pkts
