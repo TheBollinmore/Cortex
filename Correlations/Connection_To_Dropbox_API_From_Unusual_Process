@@ -1,0 +1,27 @@
+dataset = xdr_data
+| filter event_type = ENUM.STORY
+| filter actor_process_image_path != null and action_remote_port != null
+| alter dst_host = lowercase(dst_action_external_hostname)
+| filter dst_host contains "dropboxapi.com" or dst_host = "api.dropbox.com"
+| alter proc_name = lowercase(actor_process_image_name),
+        proc_path = lowercase(actor_process_image_path),
+        signer    = lowercase(coalesce(actor_process_signature_vendor, "unsigned"))
+| alter expected = if(
+      (proc_name in ("dropbox.exe", "dropboxupdate.exe", "dropboxinstaller.exe") and signer contains "dropbox")
+   or (proc_name in ("winword.exe", "excel.exe", "powerpnt.exe", "outlook.exe", "onenote.exe", "msedge.exe", "msedgewebview2.exe") and signer contains "microsoft")
+   or (proc_name in ("chrome.exe") and signer contains "google")
+   or (proc_name in ("acrobat.exe", "acrord32.exe", "acrocef.exe") and signer contains "adobe")
+   or (proc_name in ("zoom.exe") and signer contains "zoom")
+   , true, false)
+| filter expected = false
+| comp count() as conns,
+       sum(action_total_upload) as up_bytes,
+       sum(action_total_download) as down_bytes,
+       count_distinct(action_remote_ip) as dst_ips,
+       min(_time) as first_seen,
+       max(_time) as last_seen,
+       earliest(actor_process_image_command_line) as cmdline,
+       earliest(causality_actor_process_image_name) as cgo_parent
+  by agent_hostname, actor_effective_username, proc_path, actor_process_image_sha256, signer, actor_process_signature_status, dst_host
+| alter upload_mb = divide(up_bytes, 1048576)
+| fields agent_hostname, actor_effective_username, proc_path, cgo_parent, cmdline, signer, actor_process_signature_status, actor_process_image_sha256, dst_host, dst_ips, conns, upload_mb, down_bytes, first_seen, last_seen
