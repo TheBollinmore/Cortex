@@ -1,0 +1,8 @@
+dataset = xdr_data
+| filter event_type = ENUM.STORY and action_total_upload > 0
+| alter dst_host = lowercase(coalesce(dst_action_external_hostname, action_external_hostname))
+| filter dst_host ~= "(chatgpt\.com|openai\.com|oaiusercontent\.com|claude\.ai|anthropic\.com|gemini\.google\.com|aistudio\.google\.com|copilot\.microsoft\.com|perplexity\.ai|deepseek\.com|grok\.com|x\.ai|meta\.ai|huggingface\.co|mistral\.ai|poe\.com|character\.ai|you\.com|pi\.ai|cohere\.com|jasper\.ai|writesonic\.com|otter\.ai|fireflies\.ai|midjourney\.com|replicate\.com|stability\.ai|leonardo\.ai)"
+| alter upload_mb = divide(action_total_upload, 1048576), download_mb = divide(action_total_download, 1048576)
+| filter upload_mb >= 10
+| fields _time, agent_hostname, actor_effective_username, actor_process_image_name, actor_process_image_path, dst_host, action_remote_ip, action_remote_port, upload_mb, download_mb
+| sort desc upload_mb
