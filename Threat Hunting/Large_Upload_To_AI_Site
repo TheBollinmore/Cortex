@@ -6,3 +6,25 @@ dataset = xdr_data
 | filter upload_mb >= 10
 | fields _time, agent_hostname, actor_effective_username, actor_process_image_name, actor_process_image_path, dst_host, action_remote_ip, action_remote_port, upload_mb, download_mb
 | sort desc upload_mb
+
+
+dataset = xdr_data
+| filter event_type = ENUM.STORY and action_total_upload > 10485760
+| alter dst_host = lowercase(coalesce(dst_action_external_hostname, action_external_hostname))
+| filter dst_host ~= "(chatgpt\.com|openai\.com|oaiusercontent\.com|claude\.ai|anthropic\.com|gemini\.google\.com|aistudio\.google\.com|copilot\.microsoft\.com|perplexity\.ai|deepseek\.com|grok\.com|x\.ai|meta\.ai|huggingface\.co|mistral\.ai|poe\.com|character\.ai|you\.com|pi\.ai|cohere\.com|jasper\.ai|writesonic\.com|otter\.ai|fireflies\.ai|midjourney\.com|replicate\.com|stability\.ai|leonardo\.ai)"
+| alter hour = format_timestamp("%Y-%m-%d %H:00", _time), upload_mb = divide(action_total_upload, 1048576)
+| alter jk = concat(agent_id, "|", actor_process_causality_id, "|", hour)
+| comp sum(upload_mb) as total_up_mb, max(upload_mb) as max_session_mb, count() as sessions, min(_time) as first_session, max(_time) as last_session by jk, hour, agent_hostname, actor_effective_username, actor_process_image_name, dst_host
+| join type = left (
+    dataset = xdr_data
+    | filter event_type = ENUM.FILE and event_sub_type = ENUM.FILE_OPEN and action_file_size >= 1048576
+    | alter pname = lowercase(actor_process_image_name), fpath = lowercase(action_file_path)
+    | filter pname contains "chrome" or pname contains "edge" or pname contains "firefox" or pname contains "brave" or pname contains "claude"
+    | filter (fpath contains "\users" or fpath contains "/users/") and fpath not contains "\appdata" and fpath not contains "\programdata" and fpath not contains "\windows" and fpath not contains "/library/"
+    | alter hour = format_timestamp("%Y-%m-%d %H:00", _time)
+    | alter jk = concat(agent_id, "|", actor_process_causality_id, "|", hour)
+    | comp max(action_file_size) as file_bytes, min(_time) as first_open, max(_time) as last_open, count() as opens by jk, action_file_path
+) as f f.jk = jk
+| alter file_mb = divide(file_bytes, 1048576)
+| fields hour, agent_hostname, actor_effective_username, actor_process_image_name, dst_host, total_up_mb, max_session_mb, sessions, first_session, last_session, action_file_path, file_mb, first_open, last_open, opens
+| sort desc hour, asc agent_hostname, asc dst_host
