@@ -1,0 +1,341 @@
+commonfields:
+  id: ThreatLocker Unified Audit Collector
+  version: -1
+name: ThreatLocker Unified Audit Collector
+display: ThreatLocker Unified Audit Collector
+category: Data Enrichment & Threat Intelligence
+description: Polls the ThreatLocker Portal API (ActionLogGetByParametersV2 / Unified Audit) and forwards records to an XSIAM HTTP log collector. Uses fetch-incidents only as the scheduler; no alerts are created.
+configuration:
+- display: ThreatLocker instance letter (Help > ThreatLocker Access, e.g. b, e, g)
+  name: instance
+  type: 0
+  required: true
+- display: ThreatLocker API User token
+  name: api_token
+  type: 9
+  required: true
+  hiddenusername: true
+- display: managedOrganizationId (optional, MSP/child-org scoping)
+  name: managed_org_id
+  type: 0
+  required: false
+- display: XSIAM HTTP collector URL (https://api-<tenant>/logs/v1/event)
+  name: xsiam_url
+  type: 0
+  required: true
+- display: XSIAM HTTP collector API key
+  name: xsiam_key
+  type: 9
+  required: true
+  hiddenusername: true
+- display: Lookback window per poll (minutes)
+  name: lookback_minutes
+  type: 0
+  defaultvalue: '15'
+  required: false
+- display: First-run backfill (minutes)
+  name: first_fetch_minutes
+  type: 0
+  defaultvalue: '60'
+  required: false
+- display: actionId filter (blank=all; 1 Permit, 2 Deny, 3 Deny-Request, 6 Ringfenced, 99 Any Deny)
+  name: action_id
+  type: 0
+  required: false
+- display: actionType filter (blank=all; execute|install|network|registry|read|write|move|delete|baseline|powershell|elevate|configuration|dns)
+  name: action_type
+  type: 0
+  required: false
+- display: Apply portal "Remove White Noise" filter
+  name: remove_white_noise
+  type: 8
+  defaultvalue: 'false'
+  required: false
+- display: Include direct child organizations
+  name: child_orgs
+  type: 8
+  defaultvalue: 'false'
+  required: false
+- display: Page size (max 10000)
+  name: page_size
+  type: 0
+  defaultvalue: '1000'
+  required: false
+- display: Max pages per poll
+  name: max_pages
+  type: 0
+  defaultvalue: '50'
+  required: false
+- display: Fetch incidents (poll scheduler - leave enabled)
+  name: isFetch
+  type: 8
+  defaultvalue: 'true'
+  required: false
+- display: Incidents Fetch Interval
+  name: incidentFetchInterval
+  type: 19
+  defaultvalue: '5'
+  required: false
+- display: Trust any certificate (not secure)
+  name: insecure
+  type: 8
+  required: false
+- display: Use system proxy settings
+  name: proxy
+  type: 8
+  required: false
+script:
+  commands:
+  - name: threatlocker-get-events
+    description: Pull Unified Audit records for the last N minutes (war room preview; optional forward to XSIAM).
+    arguments:
+    - name: minutes
+      description: Lookback in minutes
+      defaultValue: '15'
+    - name: limit
+      description: Max records to return
+      defaultValue: '50'
+    - name: forward
+      description: Also push the returned records to the XSIAM HTTP collector
+      auto: PREDEFINED
+      predefined:
+      - 'true'
+      - 'false'
+      defaultValue: 'false'
+    outputs:
+    - contextPath: ThreatLocker.ActionLog
+      description: Raw Unified Audit records
+      type: Unknown
+  isfetch: true
+  runonce: false
+  script: |-
+    import json
+    import requests
+    from datetime import datetime, timedelta, timezone
+
+    TL_DATE_FMT = "%Y-%m-%dT%H:%M:%SZ"
+    ACTIONLOG_PATH = "/ActionLog/ActionLogGetByParametersV2"
+    MAX_POST_BYTES = 900_000  # XSIAM HTTP collector: 10 MiB hard cap, 1 MiB recommended
+
+
+    def utcnow() -> datetime:
+        return datetime.now(timezone.utc)
+
+
+    def tl_ts(dt: datetime) -> str:
+        return dt.strftime(TL_DATE_FMT)
+
+
+    class TLClient(BaseClient):
+        def __init__(self, instance: str, token: str, org_id: str, verify: bool, proxy: bool):
+            super().__init__(
+                base_url=f"https://portalapi.{instance.strip().lower()}.threatlocker.com/portalapi",
+                verify=verify,
+                proxy=proxy,
+                headers={
+                    "Authorization": token,
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                    "usenewsearch": "true",
+                },
+            )
+            self._token = token
+            if org_id:
+                self._headers["managedOrganizationId"] = org_id
+
+        def _post(self, path: str, body: dict):
+            try:
+                return self._http_request("POST", path, json_data=body, resp_type="response", timeout=90)
+            except DemistoException as e:
+                # API-user tokens are sent raw; fall back once to a Bearer prefix if the tenant insists on it
+                if "401" in str(e) and not self._headers["Authorization"].startswith("Bearer "):
+                    self._headers["Authorization"] = f"Bearer {self._token}"
+                    return self._http_request("POST", path, json_data=body, resp_type="response", timeout=90)
+                raise
+
+        def action_log_page(self, start: str, end: str, page: int, page_size: int, total_rows,
+                            action_id, action_type: str, white_noise: bool, child_orgs: bool):
+            body = {
+                "startDate": start,
+                "endDate": end,
+                "pageNumber": page,
+                "pageSize": page_size,
+                "orderBy": "dateTime",
+                "isAscending": True,
+                "paramsFieldsDto": (
+                    [{"filterType": 1, "fieldType": 1, "value": "Remove White Noise"}] if white_noise else []
+                ),
+                "groupBys": [],
+                "exportMode": False,
+                "showTotalCount": page == 1,
+                "showChildOrganizations": child_orgs,
+                "onlyTrueDenies": False,
+                "simulateDeny": False,
+            }
+            if action_id:
+                body["actionId"] = int(action_id)
+            if action_type:
+                body["actionType"] = action_type
+            if total_rows is not None:
+                body["totalRows"] = int(total_rows)
+
+            resp = self._post(ACTIONLOG_PATH, body)
+            total = resp.headers.get("totalItems") or resp.headers.get("totalitems")
+            try:
+                data = resp.json() if resp.text.strip() else []
+            except ValueError:
+                raise DemistoException(f"Non-JSON response from ThreatLocker: {resp.text[:300]}")
+            return extract_items(data), (int(total) if total not in (None, "") else None)
+
+
+    def extract_items(data):
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict):
+            for k in ("data", "pageItems", "items", "results", "actionLogs", "value"):
+                v = data.get(k)
+                if isinstance(v, list):
+                    return v
+                if isinstance(v, dict):
+                    for kk in ("pageItems", "items", "data", "results"):
+                        if isinstance(v.get(kk), list):
+                            return v[kk]
+        return []
+
+
+    def event_id(ev: dict) -> str:
+        for k in ("actionLogId", "actionLogID", "id"):
+            if ev.get(k):
+                return str(ev[k])
+        return str(hash(json.dumps(ev, sort_keys=True, default=str)))
+
+
+    def pull_window(client: TLClient, start: datetime, end: datetime, params: dict, seen: dict, cap: int = None):
+        page_size = int(params.get("page_size") or 1000)
+        max_pages = int(params.get("max_pages") or 50)
+        start_s, end_s = tl_ts(start), tl_ts(end)
+        now_s = utcnow().isoformat()
+        out, total_rows, page = [], None, 1
+        while page <= max_pages:
+            items, total = client.action_log_page(
+                start_s, end_s, page, page_size, total_rows,
+                params.get("action_id"), (params.get("action_type") or "").strip(),
+                argToBoolean(params.get("remove_white_noise", False)),
+                argToBoolean(params.get("child_orgs", False)),
+            )
+            if total_rows is None and total:
+                total_rows = total
+            for ev in items:
+                eid = event_id(ev)
+                if eid in seen:
+                    continue
+                seen[eid] = now_s
+                out.append(ev)
+                if cap and len(out) >= cap:
+                    return out, total_rows
+            demisto.debug(f"TL page {page}: {len(items)} items, total={total_rows}, new={len(out)}")
+            if not items or len(items) < page_size or (total_rows and page * page_size >= total_rows):
+                break
+            page += 1
+        return out, total_rows
+
+
+    def push_to_xsiam(events: list, url: str, key: str, verify: bool):
+        if not events:
+            return 0
+        headers = {"Authorization": key, "Content-Type": "application/json"}
+        sent, chunk, size = 0, [], 0
+
+        def flush():
+            nonlocal sent, chunk, size
+            if not chunk:
+                return
+            r = requests.post(url, headers=headers, data=("\n".join(chunk)).encode("utf-8"), timeout=60, verify=verify)
+            if r.status_code >= 300:
+                raise DemistoException(f"XSIAM HTTP collector {r.status_code}: {r.text[:300]}")
+            sent += len(chunk)
+            chunk, size = [], 0
+
+        for ev in events:
+            line = json.dumps(ev, separators=(",", ":"), default=str)
+            if size + len(line) + 1 > MAX_POST_BYTES:
+                flush()
+            chunk.append(line)
+            size += len(line) + 1
+        flush()
+        return sent
+
+
+    def fetch_and_forward(client: TLClient, params: dict):
+        last_run = demisto.getLastRun() or {}
+        seen = last_run.get("seen") or {}
+        lookback = int(params.get("lookback_minutes") or 15)
+        first_fetch = int(params.get("first_fetch_minutes") or 60)
+        now = utcnow()
+        start = now - timedelta(minutes=(lookback if last_run.get("last_end") else first_fetch))
+
+        events, _ = pull_window(client, start, now, params, seen)
+        sent = push_to_xsiam(events, params["xsiam_url"].strip(), params["xsiam_key"]["password"], not params.get("insecure"))
+
+        # prune dedup state to the rolling window (+ slack)
+        cutoff = (now - timedelta(minutes=lookback + 10)).isoformat()
+        seen = {k: v for k, v in seen.items() if v >= cutoff}
+        demisto.setLastRun({"last_end": tl_ts(now), "seen": seen})
+        demisto.info(f"ThreatLocker: pulled {len(events)} new events, forwarded {sent}, dedup state {len(seen)}")
+        return sent
+
+
+    def main():
+        params = demisto.params()
+        cmd = demisto.command()
+        verify = not params.get("insecure", False)
+        client = TLClient(
+            instance=params["instance"],
+            token=params["api_token"]["password"],
+            org_id=(params.get("managed_org_id") or "").strip(),
+            verify=verify,
+            proxy=params.get("proxy", False),
+        )
+        try:
+            if cmd == "test-module":
+                now = utcnow()
+                client.action_log_page(tl_ts(now - timedelta(minutes=5)), tl_ts(now), 1, 1, None,
+                                       None, "", False, False)
+                if not params.get("xsiam_url") or not params.get("xsiam_key", {}).get("password"):
+                    raise DemistoException("XSIAM HTTP collector URL/key not set")
+                return_results("ok")
+
+            elif cmd == "fetch-incidents":
+                fetch_and_forward(client, params)
+                demisto.incidents([])  # scheduler only; nothing becomes an alert
+
+            elif cmd == "threatlocker-get-events":
+                args = demisto.args()
+                minutes = int(args.get("minutes") or 15)
+                limit = int(args.get("limit") or 50)
+                now = utcnow()
+                events, total = pull_window(client, now - timedelta(minutes=minutes), now, params, {}, cap=limit)
+                if argToBoolean(args.get("forward", False)):
+                    push_to_xsiam(events, params["xsiam_url"].strip(), params["xsiam_key"]["password"], verify)
+                return_results(CommandResults(
+                    readable_output=tableToMarkdown(f"ThreatLocker Unified Audit (last {minutes}m, total={total})",
+                                                    events[:limit], removeNull=True),
+                    outputs_prefix="ThreatLocker.ActionLog",
+                    outputs_key_field="actionLogId",
+                    outputs=events[:limit],
+                    raw_response=events,
+                ))
+            else:
+                raise NotImplementedError(f"Command {cmd} not implemented")
+        except Exception as e:
+            return_error(f"ThreatLocker Unified Audit Collector: {e}")
+
+
+    if __name__ in ("__main__", "__builtin__", "builtins"):
+        main()
+  type: python
+  subtype: python3
+  dockerimage: demisto/python3:3.11.10.116949
+fromversion: 6.10.0
+tests:
+- No tests
