@@ -28,6 +28,11 @@ configuration:
   type: 9
   required: true
   hiddenusername: true
+- display: XSIAM collector uses gzip compression (match the collector's Compression setting)
+  name: xsiam_gzip
+  type: 8
+  defaultvalue: 'true'
+  required: false
 - display: Lookback window per poll (minutes)
   name: lookback_minutes
   type: 0
@@ -109,6 +114,7 @@ script:
   isfetch: true
   runonce: false
   script: |-
+    import gzip
     import json
     import requests
     from datetime import datetime, timedelta, timezone
@@ -240,17 +246,22 @@ script:
         return out, total_rows
 
 
-    def push_to_xsiam(events: list, url: str, key: str, verify: bool):
+    def push_to_xsiam(events: list, url: str, key: str, verify: bool, use_gzip: bool = True):
         if not events:
             return 0
         headers = {"Authorization": key, "Content-Type": "application/json"}
+        if use_gzip:
+            headers["Content-Encoding"] = "gzip"
         sent, chunk, size = 0, [], 0
 
         def flush():
             nonlocal sent, chunk, size
             if not chunk:
                 return
-            r = requests.post(url, headers=headers, data=("\n".join(chunk)).encode("utf-8"), timeout=60, verify=verify)
+            payload = ("\n".join(chunk)).encode("utf-8")
+            if use_gzip:
+                payload = gzip.compress(payload)
+            r = requests.post(url, headers=headers, data=payload, timeout=60, verify=verify)
             if r.status_code >= 300:
                 raise DemistoException(f"XSIAM HTTP collector {r.status_code}: {r.text[:300]}")
             sent += len(chunk)
@@ -275,7 +286,8 @@ script:
         start = now - timedelta(minutes=(lookback if last_run.get("last_end") else first_fetch))
 
         events, _ = pull_window(client, start, now, params, seen)
-        sent = push_to_xsiam(events, params["xsiam_url"].strip(), params["xsiam_key"]["password"], not params.get("insecure"))
+        sent = push_to_xsiam(events, params["xsiam_url"].strip(), params["xsiam_key"]["password"],
+                             not params.get("insecure"), argToBoolean(params.get("xsiam_gzip", True)))
 
         # prune dedup state to the rolling window (+ slack)
         cutoff = (now - timedelta(minutes=lookback + 10)).isoformat()
@@ -316,7 +328,8 @@ script:
                 now = utcnow()
                 events, total = pull_window(client, now - timedelta(minutes=minutes), now, params, {}, cap=limit)
                 if argToBoolean(args.get("forward", False)):
-                    push_to_xsiam(events, params["xsiam_url"].strip(), params["xsiam_key"]["password"], verify)
+                    push_to_xsiam(events, params["xsiam_url"].strip(), params["xsiam_key"]["password"], verify,
+                                  argToBoolean(params.get("xsiam_gzip", True)))
                 return_results(CommandResults(
                     readable_output=tableToMarkdown(f"ThreatLocker Unified Audit (last {minutes}m, total={total})",
                                                     events[:limit], removeNull=True),
