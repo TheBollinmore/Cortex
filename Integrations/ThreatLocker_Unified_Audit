@@ -4,7 +4,7 @@ commonfields:
 name: ThreatLocker Unified Audit Collector
 display: ThreatLocker Unified Audit Collector
 category: Data Enrichment & Threat Intelligence
-description: Polls the ThreatLocker Portal API (ActionLogGetByParametersV2 / Unified Audit) and forwards records to an XSIAM HTTP log collector. Uses fetch-incidents only as the scheduler; no alerts are created.
+description: v1.2-gzip. Polls the ThreatLocker Portal API (ActionLogGetByParametersV2 / Unified Audit) and forwards records to an XSIAM HTTP log collector. Uses fetch-incidents only as the scheduler; no alerts are created.
 configuration:
 - display: ThreatLocker instance letter (Help > ThreatLocker Access, e.g. b, e, g)
   name: instance
@@ -119,6 +119,7 @@ script:
     import requests
     from datetime import datetime, timedelta, timezone
 
+    VERSION = "1.2-gzip"
     TL_DATE_FMT = "%Y-%m-%dT%H:%M:%SZ"
     ACTIONLOG_PATH = "/ActionLog/ActionLogGetByParametersV2"
     MAX_POST_BYTES = 900_000  # XSIAM HTTP collector: 10 MiB hard cap, 1 MiB recommended
@@ -263,7 +264,7 @@ script:
                 payload = gzip.compress(payload)
             r = requests.post(url, headers=headers, data=payload, timeout=60, verify=verify)
             if r.status_code >= 300:
-                raise DemistoException(f"XSIAM HTTP collector {r.status_code}: {r.text[:300]}")
+                raise DemistoException(f"XSIAM HTTP collector {r.status_code} (v{VERSION}, gzip={use_gzip}): {r.text[:300]}")
             sent += len(chunk)
             chunk, size = [], 0
 
@@ -315,7 +316,7 @@ script:
                                        None, "", False, False)
                 if not params.get("xsiam_url") or not params.get("xsiam_key", {}).get("password"):
                     raise DemistoException("XSIAM HTTP collector URL/key not set")
-                return_results("ok")
+                return_results(f"ok (collector v{VERSION})")
 
             elif cmd == "fetch-incidents":
                 fetch_and_forward(client, params)
@@ -331,7 +332,7 @@ script:
                     push_to_xsiam(events, params["xsiam_url"].strip(), params["xsiam_key"]["password"], verify,
                                   argToBoolean(params.get("xsiam_gzip", True)))
                 return_results(CommandResults(
-                    readable_output=tableToMarkdown(f"ThreatLocker Unified Audit (last {minutes}m, total={total})",
+                    readable_output=tableToMarkdown(f"ThreatLocker Unified Audit v{VERSION} (last {minutes}m, total={total}, gzip={argToBoolean(params.get('xsiam_gzip', True))})",
                                                     events[:limit], removeNull=True),
                     outputs_prefix="ThreatLocker.ActionLog",
                     outputs_key_field="actionLogId",
