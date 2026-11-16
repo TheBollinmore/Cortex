@@ -2,23 +2,6 @@ Cortex XSIAM automation that keeps a lookup dataset of exposed ARTEX console IPs
 
 ARTEX is an open-source, LLM-driven autonomous pentest / C2 framework. Operators run its web console on internet-facing hosts, and those same hosts do the scanning and act as the C2 channel. Shodan tags the console as product:"ARTEX", which makes the full set of live consoles a daily pull. This repo turns that into a blocklist-grade lookup and three detections.
 
-Shodan (product:"ARTEX")
-        │  GET /shodan/host/search, paged
-        ▼
-ArtexLookupSync.py  ──core-api-post──▶  XSIAM lookup dataset `artex`
-        ▲                                        │
-   daily Job                                     ▼
-                                  correlation rules (IIS / Zeek / PAN-OS)
-What's in the repo
-File	Purpose
-ArtexLookupSync.py	The automation. Pulls Shodan, diffs against the lookup, upserts / prunes.
-correlation_rules.md	Three XQL correlation rules that join the lookup.
-Prerequisites
-Cortex XSIAM (tested on 3.x) or XSOAR 8 with XSIAM-style lookup datasets.
-Core REST API integration instance (ships with the platform; needs an API key with permission to read/write lookup datasets). The script calls core-api-post.
-Shodan API key on a plan that allows search filters (product: is a filter). A free developer key returns page 1 only and errors on page 2.
-Outbound HTTPS from the script container to api.shodan.io (default in XSIAM SaaS; no engine needed).
-Setup
 1. Create the lookup
 
 Settings → Data Management → Datasets → Add Lookup Dataset, name artex.
@@ -48,11 +31,7 @@ Marking shodan_api_key Secret masks it in war-room entries, job history and task
 
 3. Test
 
-From the Playground (War Room), in order:
-
-!ArtexLookupSync dry_run=true shodan_api_key=<key> max_pages=1
-
-Confirms both legs. Expect shodan_ips=100, lookup_columns, lookup_rows_now, and nothing written.
+From the Playground:
 
 !ArtexLookupSync dry_run=true prune=true shodan_api_key=<key>
 
@@ -64,11 +43,8 @@ Real run. Then dataset = artex | comp count() should equal shodan_ips. Run it ag
 
 4. Schedule
 
-Jobs → New Job → recurring, daily, off-peak → playbook containing one task that runs ArtexLookupSync with prune=true and shodan_api_key=<key> (the Secret flag keeps it masked in the task). Alert on ArtexLookupSync.shodan_ips = 0 or fetch_complete = false so a revoked key or a broken query doesn't let the lookup rot silently.
+Jobs → New Job → recurring, daily, off-peak → playbook containing one task that runs ArtexLookupSync with prune=true and shodan_api_key=<key> (the Secret flag keeps it masked in the task). 
 
-5. Rules
-
-See correlation_rules.md. Backtest the Zeek rule over 30 days before enabling.
 
 Arguments
 Argument	Default	Notes
@@ -81,6 +57,7 @@ retain_days	90	full-schema only; delete rows whose last_seen is older
 max_pages	40	100 results per page
 time_budget	480	seconds of paging before stopping
 dry_run	false	compute the diff, write nothing
+
 Safety behaviour
 A partial fetch (time budget or max_pages hit before the last page) is reported as fetch_complete=false and never prunes, so a slow Shodan day can't empty the lookup.
 In the minimal schema the script never modifies an existing row; it only adds, and only deletes with prune=true.
@@ -96,7 +73,3 @@ shodan_ips, pages_fetched, fetch_complete, elapsed_s,
 added, updated, inactivated, deleted, lookup_rows_after
 
 Dry runs add lookup_rows_now, would_upsert, would_inactivate, would_delete, new_ips, stale_ips, sample_rows.
-
-Prune vs. decay
-
-prune=true answers "what is an ARTEX console right now". That's the right list for an edge block. For detection it has a blind spot: a host often keeps scanning for days after its console stops responding on 8787/8790, and once it's pruned, your rules go quiet on it. The full schema with retain_days keeps the row (marked inactive) for the window you choose; the rules in correlation_rules.md show the join that uses it.
