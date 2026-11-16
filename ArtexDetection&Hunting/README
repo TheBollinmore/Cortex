@@ -1,0 +1,102 @@
+Cortex XSIAM automation that keeps a lookup dataset of exposed ARTEX console IPs in sync with a Shodan search, plus XQL correlation rules that alert when one of those IPs touches your network.
+
+ARTEX is an open-source, LLM-driven autonomous pentest / C2 framework. Operators run its web console on internet-facing hosts, and those same hosts do the scanning and act as the C2 channel. Shodan tags the console as product:"ARTEX", which makes the full set of live consoles a daily pull. This repo turns that into a blocklist-grade lookup and three detections.
+
+Shodan (product:"ARTEX")
+        │  GET /shodan/host/search, paged
+        ▼
+ArtexLookupSync.py  ──core-api-post──▶  XSIAM lookup dataset `artex`
+        ▲                                        │
+   daily Job                                     ▼
+                                  correlation rules (IIS / Zeek / PAN-OS)
+What's in the repo
+File	Purpose
+ArtexLookupSync.py	The automation. Pulls Shodan, diffs against the lookup, upserts / prunes.
+correlation_rules.md	Three XQL correlation rules that join the lookup.
+Prerequisites
+Cortex XSIAM (tested on 3.x) or XSOAR 8 with XSIAM-style lookup datasets.
+Core REST API integration instance (ships with the platform; needs an API key with permission to read/write lookup datasets). The script calls core-api-post.
+Shodan API key on a plan that allows search filters (product: is a filter). A free developer key returns page 1 only and errors on page 2.
+Outbound HTTPS from the script container to api.shodan.io (default in XSIAM SaaS; no engine needed).
+Setup
+1. Create the lookup
+
+Settings → Data Management → Datasets → Add Lookup Dataset, name artex.
+
+Two schemas are supported; the script detects which one you have from the existing rows.
+
+Minimal — one column, ip. The script adds new IPs and, with prune=true, deletes IPs that Shodan no longer returns. Nothing else is tracked. Start here.
+
+Full — ip, first_seen, last_seen, active, ports, hostnames, org, asn, country, source, query (all string). The script tracks first/last sighting, marks IPs that have dropped off Shodan as active="0" instead of deleting them, and removes them after retain_days. Use this if you want rules to keep matching an IP for a while after its console goes dark.
+
+Upload a CSV with just the header row (and any IPs you already have) to create either one.
+
+2. Upload the script
+
+Automations → New → paste ArtexLookupSync.py (type Python 3, Docker image demisto/python3, which includes requests).
+
+In the script's settings:
+
+Setting	Value
+Timeout	900 seconds (default 180 is too short; a full ~2,000-host walk takes 2–4 min)
+Argument shodan_api_key	Mandatory, Secret
+Argument prune	default false
+Argument dry_run	default false
+Arguments query, lookup_name, core_api_instance, retain_days, max_pages, time_budget	optional
+
+Marking shodan_api_key Secret masks it in war-room entries, job history and task inputs.
+
+3. Test
+
+From the Playground (War Room), in order:
+
+!ArtexLookupSync dry_run=true shodan_api_key=<key> max_pages=1
+
+Confirms both legs. Expect shodan_ips=100, lookup_columns, lookup_rows_now, and nothing written.
+
+!ArtexLookupSync dry_run=true prune=true shodan_api_key=<key>
+
+Full walk, still no writes. Expect fetch_complete=true, pages_fetched ≈ shodan_ips / 100 (IPs with several open ports appear on more than one page, so pages × 100 will exceed the IP count). Review new_ips and stale_ips.
+
+!ArtexLookupSync prune=true shodan_api_key=<key>
+
+Real run. Then dataset = artex | comp count() should equal shodan_ips. Run it again immediately: added=0, deleted=0.
+
+4. Schedule
+
+Jobs → New Job → recurring, daily, off-peak → playbook containing one task that runs ArtexLookupSync with prune=true and shodan_api_key=<key> (the Secret flag keeps it masked in the task). Alert on ArtexLookupSync.shodan_ips = 0 or fetch_complete = false so a revoked key or a broken query doesn't let the lookup rot silently.
+
+5. Rules
+
+See correlation_rules.md. Backtest the Zeek rule over 30 days before enabling.
+
+Arguments
+Argument	Default	Notes
+shodan_api_key	—	required
+query	product:"ARTEX"	any Shodan search
+lookup_name	artex	
+core_api_instance	—	set only if you have more than one Core REST API instance
+prune	false	mirror Shodan exactly; delete anything not returned today
+retain_days	90	full-schema only; delete rows whose last_seen is older
+max_pages	40	100 results per page
+time_budget	480	seconds of paging before stopping
+dry_run	false	compute the diff, write nothing
+Safety behaviour
+A partial fetch (time budget or max_pages hit before the last page) is reported as fetch_complete=false and never prunes, so a slow Shodan day can't empty the lookup.
+In the minimal schema the script never modifies an existing row; it only adds, and only deletes with prune=true.
+In the full schema, every update resends every column, because the lookup API nulls any column you omit.
+Lookup writes go in chunks of 1,000 with a 10 s pause, and never concurrently, per the API guidance.
+429 / 5xx from Shodan are retried three times with backoff.
+Output
+
+ArtexLookupSync.* context, one object per run:
+
+run_date, query, lookup, lookup_columns, decay_enabled, prune,
+shodan_ips, pages_fetched, fetch_complete, elapsed_s,
+added, updated, inactivated, deleted, lookup_rows_after
+
+Dry runs add lookup_rows_now, would_upsert, would_inactivate, would_delete, new_ips, stale_ips, sample_rows.
+
+Prune vs. decay
+
+prune=true answers "what is an ARTEX console right now". That's the right list for an edge block. For detection it has a blind spot: a host often keeps scanning for days after its console stops responding on 8787/8790, and once it's pruned, your rules go quiet on it. The full schema with retain_days keeps the row (marked inactive) for the window you choose; the rules in correlation_rules.md show the join that uses it.
