@@ -1,0 +1,37 @@
+Datamodeled Stem:
+Make sure your network logs are modeling
+
+datamodel dataset in ()                                             #input desired network datasets that are modeling, i.e. panw_ngfw_traffic_raw, corelight_zeek_raw, iis_iis_raw
+| filter xdm.source.ipv4 != null and xdm.target.ipv4 != null
+| alter internal_src = if(incidr(xdm.source.ipv4, "10.0.0.0/8") or incidr(xdm.source.ipv4, "172.16.0.0/12") or incidr(xdm.source.ipv4, "192.168.0.0/16"), 1, 0)
+| alter peer = if(internal_src = 1, xdm.target.ipv4, xdm.source.ipv4),
+        local_host = if(internal_src = 1, xdm.source.ipv4, xdm.target.ipv4),
+        direction = if(internal_src = 1, "outbound", "inbound")
+| join type = inner (dataset = artex | fields ip) as a a.ip = peer
+
+
+ARTEX console scanning the perimeter (inbound):
+
+<stem>
+| filter direction = "inbound"
+| comp count() as events,
+       count_distinct(local_host) as targets,
+       count_distinct(xdm.observer.product) as observers,
+       count_distinct(xdm.target.port) as ports,
+       count_distinct(xdm.network.http.url) as urls,
+       sum(if(xdm.network.http.response_code = "200", 1, 0)) as http200,
+       sum(if(xdm.network.http.method = "POST", 1, 0)) as posts,
+       min(_time) as first_hit, max(_time) as last_hit
+  by peer
+
+
+Internal host contacting an ARTEX console (outbound):
+
+<stem>
+| filter direction = "outbound"
+| comp count() as events,
+       count_distinct(xdm.target.port) as ports,
+       sum(xdm.source.sent_bytes) as bytes_out,
+       sum(xdm.target.sent_bytes) as bytes_in,
+       min(_time) as first_hit, max(_time) as last_hit
+  by local_host, peer, xdm.observer.product
